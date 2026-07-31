@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cari Hesap Takip</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#16202B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cari Hesap">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyB5K8wqC8ENo4-5aumrEAg-Ko6ZHOhwIzk",
+    authDomain: "cariotomasyon.firebaseapp.com",
+    databaseURL: "https://cariotomasyon-default-rtdb.firebaseio.com",
+    projectId: "cariotomasyon",
+    storageBucket: "cariotomasyon.firebasestorage.app",
+    messagingSenderId: "8798588064",
+    appId: "1:8798588064:web:98a727b6d16030ec6a4dc5"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F1EB; --panel:#FFFFFF; --ink:#1B2430; --ink-soft:#5B6672;
+    --sidebar:#16202B; --accent:#2F7D82; --accent-soft:#DCEBEA;
+    --warm:#D98E3C; --warm-soft:#F6E7D2; --danger:#B5473F; --danger-soft:#F3DEDB;
+    --line:#E3E0D6;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;}
+  .titlebar{background:var(--sidebar);color:#F3F1EB;display:flex;align-items:center;gap:10px;padding:0 18px;height:44px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;}
+  .titlebar .clock{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#9FADB8;}
+  .page-tabs{display:flex;gap:2px;background:var(--sidebar);padding:0 14px;}
+  .tab-btn{
+    background:none;border:none;color:#9FADB8;padding:10px 16px;font-family:'Space Grotesk',sans-serif;
+    font-weight:600;font-size:13px;cursor:pointer;border-bottom:3px solid transparent;
+  }
+  .tab-btn:hover{color:#F3F1EB;}
+  .tab-btn.active{color:#F3F1EB;border-bottom-color:var(--accent);}
+  .layout{display:flex; align-items:flex-start; max-width:1440px; margin:0 auto;}
+  .sidebar-mukellef{
+    width:250px; flex-shrink:0; position:sticky; top:0;
+    height:calc(100vh - 44px); overflow-y:auto;
+    background:var(--panel); border-right:1px solid var(--line);
+    padding:18px 14px;
+  }
+  .sidebar-mukellef h3{font-family:'Space Grotesk',sans-serif;font-size:14px;margin:0 0 12px;}
+  .sidebar-mukellef .search{width:100%;}
+  .sidebar-item{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:9px 10px; border-radius:7px; cursor:pointer; margin-bottom:3px;
+    font-size:12.5px; border:1px solid transparent;
+  }
+  .sidebar-item:hover{background:var(--accent-soft);}
+  .sidebar-item.active{background:var(--accent-soft); border-color:var(--accent); font-weight:600;}
+  .sidebar-item .isim{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .sidebar-item .bakiye{font-family:'IBM Plex Mono',monospace;font-size:11px;white-space:nowrap;}
+  .sidebar-item .bakiye.borclu{color:var(--danger);}
+  .sidebar-item .bakiye.alacakli{color:var(--accent);}
+  .sidebar-item .bakiye.sifir{color:var(--ink-soft);}
+  .sidebar-del{
+    border:none; background:none; cursor:pointer; font-size:12px; padding:2px 5px;
+    border-radius:5px; opacity:0; flex-shrink:0; color:var(--ink-soft);
+  }
+  .sidebar-item:hover .sidebar-del{opacity:1;}
+  .sidebar-del:hover{background:var(--danger-soft); color:var(--danger);}
+  .sidebar-empty{color:var(--ink-soft);font-size:12px;padding:8px 4px;}
+  .main{max-width:1200px;flex:1;min-width:0;margin:0 auto;padding:24px 28px 60px;}
+  h1.page-title{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin:0 0 4px;}
+  .page-sub{color:var(--ink-soft);font-size:13px;margin:0 0 20px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:24px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;}
+  .card .label{font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;}
+  .card .value{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;margin-top:6px;}
+  .card .value.warn{color:var(--danger);} .card .value.ok{color:var(--accent);}
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .btn{font-family:inherit;font-size:13px;font-weight:500;padding:8px 14px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{background:#276267;color:#fff;}
+  .search{flex:1;min-width:160px;padding:8px 12px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13px;background:var(--panel);}
+  select.filter{padding:8px 10px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13px;background:var(--panel);color:var(--ink);}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:20px;}
+  .panel h3{font-family:'Space Grotesk',sans-serif;font-size:14.5px;margin:0 0 12px;}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;}
+  thead tr{background:#FAF9F5;}
+  th{text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FBFAF7;}
+  .row-actions{display:flex;gap:6px;justify-content:flex-end;}
+  .icon-btn{border:none;background:none;cursor:pointer;font-size:13px;color:var(--ink-soft);padding:4px 6px;border-radius:5px;}
+  .icon-btn:hover{background:var(--accent-soft);color:var(--accent);}
+  .icon-btn.del:hover{background:var(--danger-soft);color:var(--danger);}
+  .empty{text-align:center;color:var(--ink-soft);padding:36px 10px;font-size:13px;}
+  .overlay{position:fixed;inset:0;background:rgba(20,25,35,.45);display:none;align-items:center;justify-content:center;z-index:200;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--panel);border-radius:12px;width:420px;max-width:92vw;max-height:88vh;overflow-y:auto;padding:22px;}
+  .modal.modal-wide{width:720px;max-width:94vw;}
+  .modal h3{font-family:'Space Grotesk',sans-serif;margin:0 0 16px;font-size:16px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px;}
+  .field input,.field select{width:100%;padding:9px 10px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13.5px;background:#FCFBF9;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .statusbar{position:fixed;bottom:0;left:0;right:0;height:26px;background:var(--sidebar);color:#9FADB8;font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;padding:0 14px;gap:14px;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:10px;}
+  .table-scroll table{border-radius:0;min-width:560px;}
+
+  /* Alt köşede hızlı erişim (yalnızca mobilde görünür) */
+  .fab{display:none;}
+
+  @media (max-width:720px){
+    .titlebar{padding:0 12px;height:48px;font-size:13px;}
+    .main{padding:14px 12px 84px;}
+    h1.page-title{font-size:19px;}
+    .cards{grid-template-columns:repeat(2,1fr);gap:10px;}
+    .card{padding:12px;}
+    .card .value{font-size:20px;}
+    .toolbar{flex-direction:column;align-items:stretch;gap:8px;}
+    .toolbar .search, .toolbar select.filter, .toolbar .btn{width:100%;}
+    .btn{padding:12px 14px;font-size:14px;min-height:44px;}
+    .panel{padding:14px;}
+    th, td{padding:9px 8px;font-size:12.5px;}
+    .modal{width:94vw;padding:16px;}
+    .field input, .field select{padding:11px 10px;font-size:15px;}
+    .modal-actions .btn{flex:1;min-height:44px;}
+    .row-actions{gap:2px;}
+    .icon-btn{padding:8px 9px;font-size:15px;}
+    .page-sub{font-size:12px;}
+    .statusbar{font-size:10px;padding:0 10px;}
+    .layout{flex-direction:column;}
+    .sidebar-mukellef{
+      width:100%; height:auto; position:static; border-right:none; border-bottom:1px solid var(--line);
+      padding:12px; display:flex; flex-direction:column;
+    }
+    .sidebar-mukellef #sidebar-mukellef-listesi{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+    .sidebar-item{flex-direction:column;align-items:flex-start;min-width:130px;flex-shrink:0;margin-bottom:0;}
+    .sidebar-del{opacity:1;}
+    .sidebar-item .isim{white-space:normal;font-size:12px;}
+
+    /* Tabloları mobilde kart görünümüne çevir */
+    .table-scroll{overflow-x:visible;border-radius:0;}
+    .table-scroll table{min-width:0;}
+    .table-scroll thead{display:none;}
+    .table-scroll table, .table-scroll tbody, .table-scroll tr, .table-scroll td{display:block;width:100%;}
+    .table-scroll tr{
+      border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+      padding:4px 12px;background:var(--panel);
+    }
+    .table-scroll tbody tr:hover{background:var(--panel);}
+    .table-scroll td{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:8px 0;border-bottom:1px dashed var(--line);text-align:right;
+    }
+    .table-scroll tr td:last-child{border-bottom:none;}
+    .table-scroll td[data-label]::before{
+      content:attr(data-label);font-weight:600;color:var(--ink-soft);
+      font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+      text-align:left;flex-shrink:0;
+    }
+    .table-scroll td.cell-actions{justify-content:flex-end;}
+    .table-scroll td.cell-empty{justify-content:center;padding:20px 0;}
+
+    .fab{
+      display:flex;align-items:center;justify-content:center;
+      position:fixed;right:16px;bottom:42px;width:54px;height:54px;
+      border-radius:50%;background:var(--accent);color:#fff;font-size:24px;
+      border:none;box-shadow:0 6px 16px rgba(20,25,35,.3);z-index:150;cursor:pointer;
+    }
+    .fab:active{background:#276267;}
+  }
+  @media (max-width:420px){
+    .cards{grid-template-columns:1fr 1fr;}
+  }
+
+  /* Giriş ekranı (bulut senkronu için) */
+  .login-overlay{
+    position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;
+    z-index:500;padding:20px;
+  }
+  .login-box{
+    width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:28px 24px;box-shadow:0 10px 30px rgba(0,0,0,.15);
+  }
+  .login-box h2{margin:0 0 4px;font-size:19px;}
+  .login-box p{margin:0 0 18px;font-size:13px;color:var(--ink-soft);}
+  .login-box input{
+    width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:10px;
+    font-size:15px;background:#fff;
+  }
+  .login-box button{
+    width:100%;padding:11px;border:none;border-radius:9px;background:var(--accent);color:#fff;
+    font-weight:600;font-size:14px;cursor:pointer;min-height:44px;
+  }
+  .login-error{color:var(--danger);font-size:12.5px;margin:-2px 0 10px;min-height:16px;}
+  .login-status{font-size:12px;color:var(--ink-soft);margin-top:12px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <h2>🔒 Cari Hesap</h2>
+    <p>Verilerin bulutla senkronize olması için giriş yap.</p>
+    <div class="login-error" id="login-error"></div>
+    <input type="email" id="login-email" placeholder="E-posta" autocomplete="username">
+    <input type="password" id="login-pass" placeholder="Şifre" autocomplete="current-password">
+    <button onclick="girisYap()">Giriş Yap</button>
+    <div class="login-status" id="login-status"></div>
+  </div>
+</div>
+
+<div class="titlebar">
+  <span>💰 Cari Hesap Takip</span>
+  <button id="tutar-gizle-btn" class="icon-btn" style="margin-left:auto;margin-right:10px;color:#F3F1EB;font-size:16px;" onclick="tutarGizleAcKapat()" title="Tutarları gizle/göster">👁️</button>
+  <span class="clock" id="clock">--:--:--</span>
+</div>
+
+<div class="page-tabs">
+  <button class="tab-btn active" id="tab-btn-cari" onclick="sayfaGoster('cari')">💰 Cari Hesap</button>
+  <button class="tab-btn" id="tab-btn-kasa" onclick="sayfaGoster('kasa')">🏦 Kasa</button>
+</div>
+
+<div id="sayfa-cari">
+<div class="layout">
+  <aside class="sidebar-mukellef">
+    <h3>👥 Müşteri Listesi</h3>
+    <input class="search" id="sidebar-mukellef-ara" placeholder="Ara…" oninput="renderMukellefSidebar()" style="margin-bottom:8px;">
+    <button class="btn primary" style="width:100%;margin-bottom:10px;" onclick="openMukellefEkleModal()">👤➕ Mükellef Ekle</button>
+    <div id="sidebar-mukellef-listesi"></div>
+  </aside>
+
+  <div class="main">
+  <h1 class="page-title">Cari Hesap</h1>
+  <p class="page-sub">Mükellef bazlı borç/alacak takibi ve hesap ekstresi — bağımsız, kendi verisini saklayan mini uygulama</p>
+
+  <div class="cards" id="cari-ozet-cards"></div>
+
+  <div class="toolbar">
+    <input class="search" id="cari-search" placeholder="Açıklamaya göre ara/filtrele (bakiyeyi de günceller)…" oninput="renderCariHesap()">
+    <select class="filter" id="cari-mukellef-filter" onchange="aktifMukellefFiltre=this.value; renderCariHesap()">
+      <option value="">Tüm mükellefler</option>
+    </select>
+    <select class="filter" id="cari-yil-filter" onchange="renderCariHesap()">
+      <option value="">Tüm yıllar</option>
+    </select>
+    <select class="filter" id="cari-ay-filter" onchange="renderCariHesap()">
+      <option value="">Tüm aylar</option>
+      <option value="01">Ocak</option><option value="02">Şubat</option><option value="03">Mart</option>
+      <option value="04">Nisan</option><option value="05">Mayıs</option><option value="06">Haziran</option>
+      <option value="07">Temmuz</option><option value="08">Ağustos</option><option value="09">Eylül</option>
+      <option value="10">Ekim</option><option value="11">Kasım</option><option value="12">Aralık</option>
+    </select>
+    <button class="btn primary" onclick="openCariHesapModal()">🧾 Yeni Hareket</button>
+    <button class="btn primary" style="background:#D98E3C;border-color:#D98E3C;" onclick="openTopluUcretModal()">📦 Toplu Ücret Ekle</button>
+    <button class="btn" onclick="exportCariHesapExcel()">📊 Excel'e Aktar</button>
+    <button class="btn" onclick="document.getElementById('cariExcelFile').click()">📥 Excel'den İçe Aktar</button>
+    <button class="btn" onclick="openTekFirmaIceAktarModal()">🏢📥 Tek Firma İçin İçe Aktar</button>
+    <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openFirmaTemizleModal()">🧹 Firma Bazlı Temizle</button>
+    <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openTumHareketleriTemizleModal()">🗑️ Tüm Hareketleri Temizle</button>
+    <button class="btn" style="background:#5B7A6F;border-color:#5B7A6F;color:#fff;" onclick="openYilSonuDevirModal()">📅 Yıl Sonu Devri</button>
+    <button class="btn" onclick="cariHesapRaporuOlustur()">📄 Hesap Hareket Raporu (PDF)</button>
+    <button class="btn" onclick="tumMukelleflerRaporuModal()">📋 Tüm Borçlu/Alacaklı Raporu (PDF)</button>
+    <button class="btn" onclick="dosyaJsonDisaAktar()">💾 Yedek Al (.json)</button>
+    <button class="btn" onclick="document.getElementById('jsonIceAktarFile').click()">🗄️ Yedekten Yükle</button>
+    <input type="file" id="tekFirmaExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importTekFirmaExcel(event)">
+    <input type="file" id="cariExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importCariHesapExcel(event)">
+    <input type="file" id="jsonIceAktarFile" accept="application/json" style="display:none" onchange="dosyaJsonIceAktar(event)">
+  </div>
+  <p class="page-sub" style="margin-top:-10px;">📄 Rapor için önce yukarıdaki filtreden bir mükellef seçin — açılan yazdırma penceresinde "Hedef" olarak <strong>"PDF olarak kaydet"</strong>i seçin.</p>
+  <p class="page-sub" style="margin-top:-10px;">💡 Bir mükellefin hareket detayını görmek için sol listeden veya aşağıdaki tablodan üzerine tıklayın.</p>
+
+  <div class="panel">
+    <h3 id="mukellef-ozet-baslik">Mükellef Bazlı Bakiye Özeti</h3>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Mükellef</th><th>Toplam Borç</th><th>Toplam Alacak</th><th>Bakiye</th></tr></thead>
+      <tbody id="tbl-cari-ozet"></tbody>
+    </table>
+    </div>
+  </div>
+  </div>
+</div>
+</div>
+
+<div id="sayfa-kasa" style="display:none;">
+<div class="layout">
+  <div class="main" style="width:100%;">
+  <h1 class="page-title">Kasa</h1>
+  <p class="page-sub">Mükelleflerden gelen tahsilatlar otomatik olarak buraya işlenir — sen sadece giderlerini ekle.</p>
+
+  <div class="cards" id="kasa-ozet-cards"></div>
+
+  <div class="toolbar">
+    <button class="btn primary" onclick="openKasaHareketModal(null,'Gider')">➖ Gider Ekle</button>
+    <button class="btn" onclick="openKasaHareketModal(null,'Giriş')">➕ Diğer Giriş Ekle</button>
+    <button class="btn" onclick="exportKasaExcel()">📊 Excel'e Aktar</button>
+  </div>
+
+  <div class="panel">
+    <h3>Kasa Hareketleri</h3>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tür</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
+      <tbody id="tbl-kasa"></tbody>
+    </table>
+    </div>
+  </div>
+  </div>
+</div>
+</div>
+
+<button class="fab" id="fab-btn" onclick="openCariHesapModal()" title="Yeni Hareket">➕</button>
+
+<div class="statusbar">
+  <span id="status-msg">Hazır</span>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+/* ============================================================
+   VERİ MODELİ — bağımsız IndexedDB (ana ofis programından ayrı)
+   ============================================================ */
+let DB = { cariHesap: [], mukellefListesi: [], kasaHareket: [] };
+let aktifMukellefFiltre = '';
+const IDB_NAME = 'cariHesapBagimsizDB';
+const IDB_STORE = 'kv';
+const LS_KEY = 'cariHesapVerisi_v1';
+let idbInstance = null;
+
+function idbAc(){
+  return new Promise((resolve, reject)=>{
+    if(idbInstance){ resolve(idbInstance); return; }
+    if(!window.indexedDB){ reject(new Error('IndexedDB desteklenmiyor')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = (e)=>{ idbInstance = e.target.result; resolve(idbInstance); };
+    req.onerror = (e)=>reject(e.target.error);
+  });
+}
+async function idbSet(key, value){
+  const db = await idbAc();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = ()=>resolve(true);
+    tx.onerror = (e)=>reject(e.target.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbAc();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = (e)=>reject(e.target.error);
+  });
+}
+async function kaydet(){
+  try{
+    await idbSet(LS_KEY, DB);
+    bulutaYaz();
+    return true;
+  }catch(e){
+    console.error('Kayıt yapılamadı:', e);
+    document.getElementById('status-msg').textContent = '⚠️ Kayıt yapılamadı';
+    return false;
+  }
+}
+async function yukle(){
+  try{
+    const veri = await idbGet(LS_KEY);
+    return veri || null;
+  }catch(e){
+    return null;
+  }
+}
+
+function seedData(){
+  return {
+    cariHesap: [
+      {id:1, mukellef:"Deniz Yapı İnşaat Ltd. Şti.", tarih:addDays(-40), aciklama:"Ocak-Şubat-Mart 2026 muhasebe hizmet bedeli", tur:"Borç", tutar:4500},
+      {id:2, mukellef:"Deniz Yapı İnşaat Ltd. Şti.", tarih:addDays(-20), aciklama:"Kısmi ödeme", tur:"Alacak", tutar:2000},
+      {id:3, mukellef:"Ahmet Demir (Şahıs)", tarih:addDays(-30), aciklama:"Yıllık gelir vergisi beyanname hizmet bedeli", tur:"Borç", tutar:1800},
+      {id:4, mukellef:"Ahmet Demir (Şahıs)", tarih:addDays(-15), aciklama:"Havale ile ödeme", tur:"Alacak", tutar:1800}
+    ],
+    mukellefListesi: [],
+    kasaHareket: [
+      {id:1, tarih:addDays(-20), aciklama:"Tahsilat - Deniz Yapı İnşaat Ltd. Şti. (Kısmi ödeme)", tur:"Giriş", tutar:2000, kaynak:"tahsilat", cariHesapId:2},
+      {id:2, tarih:addDays(-15), aciklama:"Tahsilat - Ahmet Demir (Şahıs) (Havale ile ödeme)", tur:"Giriş", tutar:1800, kaynak:"tahsilat", cariHesapId:4},
+      {id:3, tarih:addDays(-10), aciklama:"Ofis kirası", tur:"Gider", tutar:3500, kaynak:"manuel"}
+    ]
+  };
+}
+
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function uid(list){ return list.length ? Math.max(...list.map(x=>x.id))+1 : 1; }
+function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('tr-TR',{day:'2-digit',month:'short',year:'numeric'}); }
+let tutarlarGizli = localStorage.getItem('cariHesapTutarGizli') === '1';
+function fmtMoney(n){
+  if(tutarlarGizli) return '••••••';
+  return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + " ₺";
+}
+function tutarGizleAcKapat(){
+  tutarlarGizli = !tutarlarGizli;
+  localStorage.setItem('cariHesapTutarGizli', tutarlarGizli ? '1' : '0');
+  document.getElementById('tutar-gizle-btn').textContent = tutarlarGizli ? '🙈' : '👁️';
+  renderCariHesap();
+}
+function esc(str){ const d=document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
+function val(id){ return document.getElementById(id).value.trim(); }
+
+function tickClock(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString('tr-TR'); }
+
+/* ------------ HTML içeriğini doğrudan .pdf dosyası olarak indir ------------ */
+async function htmlToPdfIndir(ivHtml, dosyaAdi){
+  if(typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
+    alert('PDF kütüphaneleri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    return false;
+  }
+  const sarmalayici = document.createElement('div');
+  sarmalayici.style.cssText = 'position:fixed; left:-99999px; top:0; width:800px; background:#fff;';
+  sarmalayici.innerHTML = ivHtml;
+  document.body.appendChild(sarmalayici);
+
+  try{
+    const canvas = await html2canvas(sarmalayici, { scale:2, backgroundColor:'#ffffff', useCORS:true });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation:'p', unit:'pt', format:'a4' });
+    const sayfaGenislik = pdf.internal.pageSize.getWidth();
+    const sayfaYukseklik = pdf.internal.pageSize.getHeight();
+    const gorselGenislik = sayfaGenislik;
+    const gorselYukseklik = canvas.height * (gorselGenislik / canvas.width);
+
+    let kalanYukseklik = gorselYukseklik;
+    let yPozisyon = 0;
+    let ilkSayfa = true;
+
+    while(kalanYukseklik > 0){
+      if(!ilkSayfa) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, yPozisyon===0?0:-(gorselYukseklik-kalanYukseklik), gorselGenislik, gorselYukseklik);
+      kalanYukseklik -= sayfaYukseklik;
+      yPozisyon += sayfaYukseklik;
+      ilkSayfa = false;
+    }
+    pdf.save(dosyaAdi);
+    return true;
+  }catch(err){
+    console.error(err);
+    alert('PDF oluşturulurken bir hata oluştu: ' + err.message);
+    return false;
+  }finally{
+    document.body.removeChild(sarmalayici);
+  }
+}
+
+function renderModal(html, wide){
+  const el = document.getElementById('modal-content');
+  el.classList.toggle('modal-wide', !!wide);
+  el.innerHTML = html;
+  document.getElementById('overlay').classList.add('open');
+}
+let aktifModalMukellef = null;
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); aktifModalMukellef = null; }
+document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
+
+/* ============================================================
+   CARİ HESAP — mantık (ana programdakiyle aynı)
+   ============================================================ */
+function cariOzet(){
+  const gruplar = {};
+  DB.cariHesap.forEach(h=>{
+    if(!gruplar[h.mukellef]) gruplar[h.mukellef] = {mukellef:h.mukellef, toplamBorc:0, toplamAlacak:0};
+    if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
+    else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+  });
+  return Object.values(gruplar).map(g=>({...g, bakiye: g.toplamBorc - g.toplamAlacak}));
+}
+function cariBakiyeMap(){
+  const map = {}; const gruplu = {};
+  DB.cariHesap.forEach(h=>{ (gruplu[h.mukellef] = gruplu[h.mukellef]||[]).push(h); });
+  Object.values(gruplu).forEach(liste=>{
+    liste.sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+    let running = 0;
+    liste.forEach(h=>{ running += (h.tur==='Borç' ? Number(h.tutar) : -Number(h.tutar)); map[h.id] = running; });
+  });
+  return map;
+}
+function mukellefListesiCikar(){
+  const isimler = new Set([...(DB.mukellefListesi||[]), ...DB.cariHesap.map(h=>h.mukellef)]);
+  return [...isimler].sort((a,b)=>a.localeCompare(b,'tr'));
+}
+function renderMukellefSidebar(){
+  const kutu = document.getElementById('sidebar-mukellef-listesi');
+  if(!kutu) return;
+  const q = (document.getElementById('sidebar-mukellef-ara')?.value||'').toLowerCase();
+  const aktifFiltre = aktifMukellefFiltre;
+  const isimler = mukellefListesiCikar().filter(m=>m.toLowerCase().includes(q));
+
+  if(!isimler.length){
+    kutu.innerHTML = '<div class="sidebar-empty">Kayıtlı mükellef yok.</div>';
+    return;
+  }
+  kutu.innerHTML = isimler.map((m)=>{
+    const aktifMi = aktifFiltre === m;
+    return `<div class="sidebar-item${aktifMi?' active':''}" data-mukellef="${esc(m)}" title="${esc(m)}">
+      <span class="isim">${esc(m)}</span>
+      <button type="button" class="sidebar-del" data-mukellef="${esc(m)}" title="Mükellefi sil">🗑</button>
+    </div>`;
+  }).join('');
+  if(!kutu.__tikDinleyiciEklendi){
+    kutu.addEventListener('click', (e)=>{
+      const silBtn = e.target.closest('.sidebar-del');
+      if(silBtn){
+        sidebarMukellefSil(silBtn.dataset.mukellef);
+        return;
+      }
+      const item = e.target.closest('.sidebar-item');
+      if(!item) return;
+      const isim = item.dataset.mukellef;
+      if(isim !== undefined) sidebarMukellefSec(isim);
+    });
+    kutu.__tikDinleyiciEklendi = true;
+  }
+}
+function sidebarMukellefSec(mukellef){
+  aktifMukellefFiltre = mukellef;
+  renderCariHesap();
+  openHareketDetayModal(mukellef);
+}
+function sidebarMukellefSil(mukellef){
+  const hareketSayisi = DB.cariHesap.filter(h=>h.mukellef===mukellef).length;
+  const mesaj = hareketSayisi > 0
+    ? `"${mukellef}" mükellefinin ${hareketSayisi} adet hareketi var. Silerseniz bu mükellefe ait TÜM hareketler de silinecektir. Emin misiniz?`
+    : `"${mukellef}" mükellefini silmek istediğinize emin misiniz?`;
+  if(!confirm(mesaj)) return;
+
+  DB.cariHesap = DB.cariHesap.filter(h=>h.mukellef!==mukellef);
+  if(DB.mukellefListesi) DB.mukellefListesi = DB.mukellefListesi.filter(m=>m!==mukellef);
+  if(aktifMukellefFiltre === mukellef) aktifMukellefFiltre = '';
+
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = `"${mukellef}" silindi`;
+}
+function openMukellefEkleModal(){
+  renderModal(`
+    <h3>👤➕ Mükellef Ekle</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Henüz hiç hareketi olmasa bile, mükellefi listede görmek için ekleyebilirsiniz.</p>
+    <div class="field"><label>Mükellef Adı</label><input id="f-yeniMukellefAdi" placeholder="Örn. Yeni Müşteri Ltd. Şti."></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="saveMukellefEkle()">Ekle</button>
+    </div>
+  `);
+  setTimeout(()=>document.getElementById('f-yeniMukellefAdi')?.focus(), 50);
+}
+function saveMukellefEkle(){
+  const isim = val('f-yeniMukellefAdi');
+  if(!isim){ alert('Mükellef adı zorunludur.'); return; }
+  const mevcut = mukellefListesiCikar();
+  if(mevcut.some(m=>m.toLowerCase()===isim.toLowerCase())){
+    alert('Bu isimde bir mükellef zaten kayıtlı.');
+    return;
+  }
+  if(!DB.mukellefListesi) DB.mukellefListesi = [];
+  DB.mukellefListesi.push(isim);
+  closeModal();
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = `"${isim}" eklendi`;
+}
+function renderCariHesap(){
+  renderMukellefSidebar();
+  const filterSel = document.getElementById('cari-mukellef-filter');
+  const mevcut = aktifMukellefFiltre;
+  const mukellefler = mukellefListesiCikar();
+  filterSel.innerHTML = ['<option value="">Tüm mükellefler</option>']
+    .concat(mukellefler.map(m=>`<option ${mevcut===m?'selected':''}>${esc(m)}</option>`)).join('');
+
+  const yilSel = document.getElementById('cari-yil-filter');
+  const mevcutYil = yilSel.value;
+  const yillar = [...new Set(DB.cariHesap.map(h=>h.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  yilSel.innerHTML = ['<option value="">Tüm yıllar</option>']
+    .concat(yillar.map(y=>`<option ${mevcutYil===y?'selected':''}>${y}</option>`)).join('');
+
+  const q = (document.getElementById('cari-search')?.value||"").toLowerCase();
+  const f = aktifMukellefFiltre;
+  const yilF = yilSel.value;
+  const ayF = document.getElementById('cari-ay-filter')?.value || '';
+
+  const ozet = q ? cariOzetFiltreli(q) : cariOzet();
+  const toplamBorc = ozet.reduce((s,o)=>s+o.toplamBorc,0);
+  const toplamAlacakTutari = ozet.reduce((s,o)=>s+o.toplamAlacak,0);
+  const genelBakiye = toplamBorc - toplamAlacakTutari;
+  const borcluSayisi = ozet.filter(o=>o.bakiye>0).length;
+  document.getElementById('cari-ozet-cards').innerHTML = [
+    {label:q?`Toplam Borç (filtreli)`:"Toplam Borç", value:fmtMoney(toplamBorc), cls:""},
+    {label:q?`Toplam Alacak (filtreli)`:"Toplam Alacak", value:fmtMoney(toplamAlacakTutari), cls:""},
+    {label:q?`Bakiye (filtreli)`:"Genel Bakiye", value:fmtMoney(genelBakiye), cls:genelBakiye>0?"warn":"ok"},
+    {label:"Borçlu Mükellef Sayısı", value:borcluSayisi, cls:borcluSayisi>0?"warn":"ok"}
+  ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
+  if(q){
+    document.getElementById('mukellef-ozet-baslik').textContent = `Mükellef Bazlı Bakiye Özeti — "${document.getElementById('cari-search').value}" filtresine göre`;
+  } else {
+    document.getElementById('mukellef-ozet-baslik').textContent = 'Mükellef Bazlı Bakiye Özeti';
+  }
+
+  const ozetTbody = document.getElementById('tbl-cari-ozet');
+  const ozetRows = ozet.filter(o=>!f || o.mukellef===f).sort((a,b)=>a.mukellef.localeCompare(b.mukellef,'tr'));
+  ozetTbody.innerHTML = ozetRows.length ? ozetRows.map(o=>`
+    <tr data-mukellef="${esc(o.mukellef)}" style="cursor:pointer;">
+      <td data-label="Mükellef">${esc(o.mukellef)}</td>
+      <td data-label="Toplam Borç">${fmtMoney(o.toplamBorc)}</td>
+      <td data-label="Toplam Alacak">${fmtMoney(o.toplamAlacak)}</td>
+      <td data-label="Bakiye"><strong style="color:${o.bakiye>0?'var(--danger)':o.bakiye<0?'var(--accent)':'inherit'}">${fmtMoney(o.bakiye)}</strong></td>
+    </tr>`).join('') : `<tr><td class="cell-empty" colspan="4"><div class="empty">Kayıt bulunamadı.</div></td></tr>`;
+  if(!ozetTbody.__tikDinleyiciEklendi){
+    ozetTbody.addEventListener('click', (e)=>{
+      const tr = e.target.closest('tr[data-mukellef]');
+      if(!tr) return;
+      openHareketDetayModal(tr.dataset.mukellef);
+    });
+    ozetTbody.__tikDinleyiciEklendi = true;
+  }
+  renderKasa();
+}
+
+/* ============================================================
+   KASA — tahsilatlar otomatik işlenir, giderler elle girilir
+   ============================================================ */
+function sayfaGoster(sayfa){
+  document.getElementById('sayfa-cari').style.display = sayfa==='cari' ? '' : 'none';
+  document.getElementById('sayfa-kasa').style.display = sayfa==='kasa' ? '' : 'none';
+  document.getElementById('tab-btn-cari').classList.toggle('active', sayfa==='cari');
+  document.getElementById('tab-btn-kasa').classList.toggle('active', sayfa==='kasa');
+  const fab = document.getElementById('fab-btn');
+  if(sayfa==='kasa'){ fab.setAttribute('onclick',"openKasaHareketModal(null,'Gider')"); fab.title = 'Gider Ekle'; }
+  else { fab.setAttribute('onclick','openCariHesapModal()'); fab.title = 'Yeni Hareket'; }
+  if(sayfa==='kasa') renderKasa();
+}
+function kasaBakiyeMap(){
+  const liste = [...(DB.kasaHareket||[])].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  const map = {}; let running = 0;
+  liste.forEach(k=>{ running += (k.tur==='Giriş' ? Number(k.tutar) : -Number(k.tutar)); map[k.id] = running; });
+  return map;
+}
+function renderKasa(){
+  if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
+  const bakiyeMap = kasaBakiyeMap();
+  const toplamGiris = DB.kasaHareket.filter(k=>k.tur==='Giriş').reduce((s,k)=>s+Number(k.tutar),0);
+  const toplamGider = DB.kasaHareket.filter(k=>k.tur==='Gider').reduce((s,k)=>s+Number(k.tutar),0);
+  const kasaBakiye = toplamGiris - toplamGider;
+  document.getElementById('kasa-ozet-cards').innerHTML = [
+    {label:"Toplam Giriş (Tahsilat + Diğer)", value:fmtMoney(toplamGiris), cls:""},
+    {label:"Toplam Gider", value:fmtMoney(toplamGider), cls:""},
+    {label:"Kasa Bakiyesi", value:fmtMoney(kasaBakiye), cls:kasaBakiye<0?"warn":"ok"}
+  ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
+
+  const siraliListe = [...DB.kasaHareket].sort((a,b)=> b.tarih===a.tarih ? b.id-a.id : b.tarih.localeCompare(a.tarih));
+  const tbody = document.getElementById('tbl-kasa');
+  tbody.innerHTML = siraliListe.length ? siraliListe.map(k=>`
+    <tr>
+      <td data-label="Tarih">${fmtDate(k.tarih)}</td>
+      <td data-label="Açıklama">${esc(k.aciklama)}${k.kaynak==='tahsilat'?' <span style="font-size:10.5px;color:var(--accent);">🔗 Cari Hesaptan</span>':''}</td>
+      <td data-label="Tür"><span style="font-weight:600;color:${k.tur==='Giriş'?'var(--accent)':'var(--danger)'}">${k.tur}</span></td>
+      <td data-label="Tutar">${fmtMoney(k.tutar)}</td>
+      <td data-label="Bakiye"><strong style="color:${bakiyeMap[k.id]<0?'var(--danger)':'inherit'}">${fmtMoney(bakiyeMap[k.id])}</strong></td>
+      <td class="cell-actions"><div class="row-actions">
+        ${k.kaynak==='tahsilat'
+          ? `<button class="icon-btn" onclick="alert('Bu kayıt bir cari hesap tahsilatından otomatik geldi. Tutarını değiştirmek için ilgili mükellefin cari hesap hareketini düzenleyin.')" title="Cari hesaptan geliyor">🔗</button>
+             <button class="icon-btn del" onclick="deleteKasaHareket(${k.id})">🗑</button>`
+          : `<button class="icon-btn" onclick="openKasaHareketModal(${k.id})">✎</button>
+             <button class="icon-btn del" onclick="deleteKasaHareket(${k.id})">🗑</button>`}
+      </div></td>
+    </tr>`).join('') : `<tr><td class="cell-empty" colspan="6"><div class="empty">Kasa hareketi bulunamadı.</div></td></tr>`;
+}
+function openKasaHareketModal(id, turOnerilen){
+  const item = id ? DB.kasaHareket.find(k=>k.id===id) : null;
+  if(item && item.kaynak==='tahsilat'){
+    alert('Bu kayıt bir cari hesap tahsilatından otomatik geldi. Düzenlemek için ilgili mükellefin cari hesap hareketini düzenleyin.');
+    return;
+  }
+  renderModal(`
+    <h3>${item ? 'Kasa Hareketini Düzenle' : (turOnerilen==='Gider' ? '➖ Gider Ekle' : '➕ Giriş Ekle')}</h3>
+    <div class="field"><label>Tarih</label><input id="f-kasaTarih" type="date" value="${item?item.tarih:addDays(0)}"></div>
+    <div class="field"><label>Açıklama</label><input id="f-kasaAciklama" value="${item?esc(item.aciklama):''}" placeholder="Örn. Ofis kirası, kırtasiye, elektrik faturası"></div>
+    <div class="field"><label>Tür</label>
+      <select id="f-kasaTur">
+        <option value="Gider" ${(item?item.tur:turOnerilen)==='Gider'?'selected':''}>Gider</option>
+        <option value="Giriş" ${(item?item.tur:turOnerilen)==='Giriş'?'selected':''}>Giriş (tahsilat dışı)</option>
+      </select>
+    </div>
+    <div class="field"><label>Tutar (₺)</label><input id="f-kasaTutar" type="number" step="0.01" value="${item?item.tutar:''}"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="saveKasaHareket(${item?item.id:'null'})">Kaydet</button>
+    </div>
+  `);
+}
+function saveKasaHareket(id){
+  const data = {
+    tarih: val('f-kasaTarih'), aciklama: val('f-kasaAciklama'), tur: val('f-kasaTur'), tutar: Number(val('f-kasaTutar'))||0
+  };
+  if(!data.aciklama){ alert('Açıklama zorunludur.'); return; }
+  if(!data.tutar){ alert('Tutar sıfırdan büyük olmalıdır.'); return; }
+  if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
+  if(id){
+    Object.assign(DB.kasaHareket.find(k=>k.id===id), data);
+  } else {
+    data.id = uid(DB.kasaHareket);
+    data.kaynak = 'manuel';
+    DB.kasaHareket.push(data);
+  }
+  closeModal();
+  renderKasa();
+  kaydet();
+  document.getElementById('status-msg').textContent = 'Kasa hareketi kaydedildi';
+}
+function deleteKasaHareket(id){
+  const item = DB.kasaHareket.find(k=>k.id===id);
+  if(!item) return;
+  const mesaj = item.kaynak==='tahsilat'
+    ? 'Bu kayıt sadece Kasa\'dan silinecek — ilgili mükellefin cari hesabındaki tahsilat kaydı etkilenmeyecek, orada olduğu gibi kalacak. Devam edilsin mi?'
+    : 'Bu kasa hareketini silmek istediğinize emin misiniz?';
+  if(!confirm(mesaj)) return;
+  DB.kasaHareket = DB.kasaHareket.filter(k=>k.id!==id);
+  renderKasa();
+  kaydet();
+  document.getElementById('status-msg').textContent = 'Kasa hareketi silindi';
+}
+function exportKasaExcel(){
+  if(typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.'); return; }
+  const bakiyeMap = kasaBakiyeMap();
+  const rows = [...(DB.kasaHareket||[])].sort((a,b)=>a.tarih.localeCompare(b.tarih)).map(k=>({
+    "Tarih": k.tarih, "Açıklama": k.aciklama, "Tür": k.tur, "Tutar": k.tutar, "Bakiye": bakiyeMap[k.id], "Kaynak": k.kaynak==='tahsilat'?'Cari Hesap Tahsilatı':'Manuel'
+  }));
+  if(!rows.length){ alert('Kasa hareketi bulunamadı.'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:36},{wch:10},{wch:12},{wch:12},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Kasa");
+  XLSX.writeFile(wb, "kasa-" + new Date().toISOString().slice(0,10) + ".xlsx");
+  document.getElementById('status-msg').textContent = 'Kasa Excel olarak dışa aktarıldı';
+}
+function openHareketDetayModal(mukellef){
+  aktifModalMukellef = mukellef;
+  const yilF = document.getElementById('cari-yil-filter')?.value || '';
+  const ayF = document.getElementById('cari-ay-filter')?.value || '';
+  const q = (document.getElementById('cari-search')?.value||'').toLowerCase();
+
+  const hareketlerTumu = DB.cariHesap.filter(h=>h.mukellef===mukellef);
+  const filtreAktif = !!(yilF || ayF || q);
+  const hareketlerFiltreli = hareketlerTumu.filter(h=>
+    (!yilF || h.tarih.slice(0,4)===yilF) &&
+    (!ayF || h.tarih.slice(5,7)===ayF) &&
+    h.aciklama.toLowerCase().includes(q)
+  );
+
+  // Bakiye, sadece o an listelenen (filtrelenmiş) hareketlere göre kendi içinde tutarlı hesaplanır.
+  const kronolojikSirali = [...hareketlerFiltreli].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  const bakiyeMapFiltre = {};
+  let running = 0;
+  kronolojikSirali.forEach(h=>{ running += (h.tur==='Borç' ? Number(h.tutar) : -Number(h.tutar)); bakiyeMapFiltre[h.id] = running; });
+
+  const toplamBorc = hareketlerFiltreli.filter(h=>h.tur==='Borç').reduce((s,h)=>s+Number(h.tutar),0);
+  const toplamAlacak = hareketlerFiltreli.filter(h=>h.tur==='Alacak').reduce((s,h)=>s+Number(h.tutar),0);
+  const guncelBakiye = toplamBorc - toplamAlacak;
+
+  const hareketler = [...hareketlerFiltreli].sort((a,b)=> b.tarih===a.tarih ? b.id-a.id : b.tarih.localeCompare(a.tarih));
+
+  renderModal(`
+    <h3>${esc(mukellef)}</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin:-8px 0 6px;font-size:12.5px;color:var(--ink-soft);">
+      <span>Toplam Borç: <strong style="color:var(--ink);">${fmtMoney(toplamBorc)}</strong></span>
+      <span>Toplam Alacak: <strong style="color:var(--ink);">${fmtMoney(toplamAlacak)}</strong></span>
+      <span>Bakiye: <strong style="color:${guncelBakiye>0?'var(--danger)':guncelBakiye<0?'var(--accent)':'inherit'}">${fmtMoney(guncelBakiye)}</strong></span>
+    </div>
+    ${filtreAktif ? `<p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 10px;">🔍 Filtre uygulanıyor — ${hareketlerFiltreli.length}/${hareketlerTumu.length} hareket gösteriliyor. Toplamlar ve bakiye sadece gösterilen hareketlere göredir.</p>` : `<div style="margin-bottom:14px;"></div>`}
+    <div class="table-scroll" style="max-height:min(46vh,340px);overflow-y:auto;">
+    <table>
+      <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tür</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
+      <tbody>
+        ${hareketler.length ? hareketler.map(h=>`
+          <tr>
+            <td data-label="Tarih">${fmtDate(h.tarih)}</td>
+            <td data-label="Açıklama">${esc(h.aciklama)}</td>
+            <td data-label="Tür"><span style="font-weight:600;color:${h.tur==='Borç'?'var(--danger)':'var(--accent)'}">${h.tur}</span></td>
+            <td data-label="Tutar">${fmtMoney(h.tutar)}</td>
+            <td data-label="Bakiye"><strong style="color:${bakiyeMapFiltre[h.id]>0?'var(--danger)':bakiyeMapFiltre[h.id]<0?'var(--accent)':'inherit'}">${fmtMoney(bakiyeMapFiltre[h.id])}</strong></td>
+            <td class="cell-actions"><div class="row-actions">
+              <button class="icon-btn" onclick="openCariHesapModal(${h.id})">✎</button>
+              <button class="icon-btn del" onclick="deleteCariHesap(${h.id})">🗑</button>
+            </div></td>
+          </tr>`).join('') : `<tr><td class="cell-empty" colspan="6"><div class="empty">Hareket bulunamadı.</div></td></tr>`}
+      </tbody>
+    </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Kapat</button>
+      <button class="btn" onclick="cariHesapRaporuOlustur(aktifModalMukellef)">📄 Hesap Hareket Raporu (PDF)</button>
+      <button class="btn" onclick="exportCariHesapExcel(aktifModalMukellef)">📊 Excel'e Aktar</button>
+      <button class="btn primary" onclick="hareketEkleAktifMukellefe()">🧾 Bu Mükellefe Hareket Ekle</button>
+    </div>
+  `, true);
+}
+function hareketEkleAktifMukellefe(){
+  openCariHesapModal(null, aktifModalMukellef);
+}
+function vazgecCariHesap(){
+  if(aktifModalMukellef) openHareketDetayModal(aktifModalMukellef);
+  else closeModal();
+}
+function openCariHesapModal(id, onMukellef){
+  const item = id ? DB.cariHesap.find(h=>h.id===id) : null;
+  const mukellefBaslangic = item ? item.mukellef : (onMukellef || '');
+  const mukellefler = mukellefListesiCikar();
+  renderModal(`
+    <h3>${item?'Hareketi Düzenle':'Yeni Cari Hareket'}</h3>
+    <div class="field"><label>Mükellef</label>
+      <input id="f-cariMukellef" list="cari-mukellef-datalist" value="${esc(mukellefBaslangic)}" placeholder="Mükellef adını yazın">
+      <datalist id="cari-mukellef-datalist">
+        ${mukellefler.map(m=>`<option value="${esc(m)}">`).join('')}
+      </datalist>
+    </div>
+    <div class="field"><label>Tarih</label><input id="f-cariTarih" type="date" value="${item?item.tarih:addDays(0)}"></div>
+    <div class="field"><label>Açıklama</label><input id="f-cariAciklama" value="${item?esc(item.aciklama):''}" placeholder="Örn. Mart 2026 muhasebe hizmet bedeli"></div>
+    <div class="field"><label>Tür</label>
+      <select id="f-cariTur">
+        <option value="Borç" ${item&&item.tur==='Borç'?'selected':''}>Borç (mükellefe fatura/hizmet bedeli)</option>
+        <option value="Alacak" ${item&&item.tur==='Alacak'?'selected':''}>Alacak (mükelleften tahsilat)</option>
+      </select>
+    </div>
+    <div class="field"><label>Tutar (₺)</label><input id="f-cariTutar" type="number" step="0.01" value="${item?item.tutar:''}"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="vazgecCariHesap()">Vazgeç</button>
+      <button class="btn primary" onclick="saveCariHesap(${item?item.id:'null'})">Kaydet</button>
+    </div>
+  `);
+}
+function saveCariHesap(id){
+  const data = {
+    mukellef: val('f-cariMukellef'), tarih: val('f-cariTarih'), aciklama: val('f-cariAciklama'),
+    tur: val('f-cariTur'), tutar: Number(val('f-cariTutar'))||0
+  };
+  if(!data.mukellef){ alert('Mükellef adı zorunludur.'); return; }
+  if(!data.aciklama){ alert('Açıklama zorunludur.'); return; }
+  if(!data.tutar){ alert('Tutar sıfırdan büyük olmalıdır.'); return; }
+  let kayitliId = id;
+  if(id){
+    Object.assign(DB.cariHesap.find(h=>h.id===id), data);
+  } else {
+    kayitliId = uid(DB.cariHesap);
+    data.id = kayitliId;
+    DB.cariHesap.push(data);
+  }
+  cariHesaptenKasaSenkronla(kayitliId, data);
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = 'Hareket kaydedildi';
+  if(aktifModalMukellef) openHareketDetayModal(aktifModalMukellef);
+  else closeModal();
+}
+
+/* ------------ Cari Hesap ↔ Kasa senkronu (tahsilatlar otomatik kasaya işlenir) ------------ */
+function cariHesaptenKasaSenkronla(cariId, data){
+  if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
+  const mevcutKasa = DB.kasaHareket.find(k=>k.cariHesapId===cariId && k.kaynak==='tahsilat');
+  if(data.tur === 'Alacak'){
+    const aciklama = `Tahsilat - ${data.mukellef} (${data.aciklama})`;
+    if(mevcutKasa){
+      Object.assign(mevcutKasa, { tarih: data.tarih, aciklama, tutar: data.tutar });
+    } else {
+      DB.kasaHareket.push({ id: uid(DB.kasaHareket), tarih: data.tarih, aciklama, tur:'Giriş', tutar: data.tutar, kaynak:'tahsilat', cariHesapId: cariId });
+    }
+  } else if(mevcutKasa){
+    DB.kasaHareket = DB.kasaHareket.filter(k=>k.id!==mevcutKasa.id);
+  }
+}
+function cariHesaptenKasaSil(cariId){
+  if(!Array.isArray(DB.kasaHareket)) return;
+  DB.kasaHareket = DB.kasaHareket.filter(k=>!(k.cariHesapId===cariId && k.kaynak==='tahsilat'));
+}
+
+/* ------------ Toplu Ücret Ekleme (birden fazla mükellefe aynı anda) ------------ */
+function openTopluUcretModal(){
+  const mukellefler = mukellefListesiCikar();
+  renderModal(`
+    <h3>📦 Toplu Ücret Ekle</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Seçtiğiniz mükelleflerin hepsine aynı anda aynı hareketi (örn. aylık muhasebe ücreti) ekler.</p>
+    <div class="field">
+      <label>Mükellefler <button type="button" onclick="topluUcretTumunuSec(this)" style="float:right;font-size:11px;border:none;background:none;color:var(--accent);cursor:pointer;">Tümünü Seç/Kaldır</button></label>
+      <div id="toplu-mukellef-listesi" style="max-height:160px;overflow-y:auto;border:1px solid var(--line);border-radius:7px;padding:8px;background:#FCFBF9;">
+        ${mukellefler.length ? mukellefler.map(m=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" class="toplu-mukellef-check" value="${esc(m)}" style="width:auto;">
+            ${esc(m)}
+          </label>`).join('') : '<div style="color:var(--ink-soft);font-size:12.5px;">Henüz kayıtlı mükellef yok — aşağıya elle ekleyin.</div>'}
+      </div>
+    </div>
+    <div class="field">
+      <label>Yeni Mükellefler (opsiyonel — her satıra bir isim)</label>
+      <textarea id="f-topluYeniMukellefler" placeholder="Listede olmayan mükellef varsa buraya, her satıra bir isim yazın" style="width:100%;min-height:60px;padding:9px 10px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13.5px;background:#FCFBF9;resize:vertical;"></textarea>
+    </div>
+    <div class="field"><label>Tarih</label><input id="f-topluTarih" type="date" value="${addDays(0)}"></div>
+    <div class="field"><label>Açıklama</label><input id="f-topluAciklama" placeholder="Örn. Temmuz 2026 muhasebe hizmet bedeli"></div>
+    <div class="field"><label>Tür</label>
+      <select id="f-topluTur">
+        <option value="Borç">Borç (mükellefe fatura/hizmet bedeli)</option>
+        <option value="Alacak">Alacak (mükelleften tahsilat)</option>
+      </select>
+    </div>
+    <div class="field"><label>Tutar (₺) — her mükellefe uygulanır</label><input id="f-topluTutar" type="number" step="0.01"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="saveTopluUcret()">Hepsine Ekle</button>
+    </div>
+  `);
+}
+function topluUcretTumunuSec(btn){
+  const kutular = document.querySelectorAll('.toplu-mukellef-check');
+  const hepsiSecili = Array.from(kutular).every(k=>k.checked);
+  kutular.forEach(k=> k.checked = !hepsiSecili);
+}
+function saveTopluUcret(){
+  const secilenler = Array.from(document.querySelectorAll('.toplu-mukellef-check:checked')).map(k=>k.value);
+  const yeniler = val('f-topluYeniMukellefler').split('\n').map(s=>s.trim()).filter(Boolean);
+  const tumMukellefler = [...new Set([...secilenler, ...yeniler])];
+
+  const tarih = val('f-topluTarih');
+  const aciklama = val('f-topluAciklama');
+  const tur = val('f-topluTur');
+  const tutar = Number(val('f-topluTutar'))||0;
+
+  if(!tumMukellefler.length){ alert('En az bir mükellef seçin veya elle ekleyin.'); return; }
+  if(!aciklama){ alert('Açıklama zorunludur.'); return; }
+  if(!tutar){ alert('Tutar sıfırdan büyük olmalıdır.'); return; }
+
+  tumMukellefler.forEach(mukellef=>{
+    const yeniId = uid(DB.cariHesap);
+    const kayit = { id: yeniId, mukellef, tarih, aciklama, tur, tutar };
+    DB.cariHesap.push(kayit);
+    cariHesaptenKasaSenkronla(yeniId, kayit);
+  });
+
+  closeModal();
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = `${tumMukellefler.length} mükellefe toplu hareket eklendi`;
+  alert(`${tumMukellefler.length} mükellefe "${aciklama}" (${fmtMoney(tutar)}, ${tur}) eklendi.`);
+}
+
+function deleteCariHesap(id){
+  if(!confirm('Bu hareketi silmek istediğinize emin misiniz?')) return;
+  DB.cariHesap = DB.cariHesap.filter(h=>h.id!==id);
+  cariHesaptenKasaSil(id);
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = 'Hareket silindi';
+  if(aktifModalMukellef) openHareketDetayModal(aktifModalMukellef);
+}
+
+/* ------------ Excel'e Aktar / Excel'den İçe Aktar ------------ */
+function exportCariHesapExcel(mukellefParam){
+  if(typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.'); return; }
+  const bakiyeMap = cariBakiyeMap();
+  const kaynak = mukellefParam ? DB.cariHesap.filter(h=>h.mukellef===mukellefParam) : DB.cariHesap;
+  if(mukellefParam && !kaynak.length){ alert('Bu mükellef için hareket kaydı bulunamadı.'); return; }
+  const rows = [...kaynak].sort((a,b)=>a.tarih.localeCompare(b.tarih)).map(h=>({
+    "Mükellef": h.mukellef, "Tarih": h.tarih, "Açıklama": h.aciklama, "Tür": h.tur, "Tutar": h.tutar, "Bakiye": bakiyeMap[h.id]
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:28},{wch:12},{wch:36},{wch:10},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cari Hesap");
+  const dosyaAdi = mukellefParam
+    ? `cari-hesap-${mukellefParam.replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ]/g,'-')}-${new Date().toISOString().slice(0,10)}.xlsx`
+    : "cari-hesap-" + new Date().toISOString().slice(0,10) + ".xlsx";
+  XLSX.writeFile(wb, dosyaAdi);
+  document.getElementById('status-msg').textContent = 'Excel olarak dışa aktarıldı';
+}
+function pickField(row, ...aliases){
+  const normalize = (k)=> String(k).trim().toLocaleLowerCase('tr').replace(/ı/g,'i').replace(/[^a-z0-9]/g,'');
+  const map = {};
+  Object.keys(row).forEach(k=>{ map[normalize(k)] = row[k]; });
+  for(const a of aliases){
+    const v = map[normalize(a)];
+    if(v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+function parseTarihDegeri(raw){
+  if(!raw) return addDays(0);
+  if(raw instanceof Date) return raw.toISOString().slice(0,10);
+  const s = String(raw).trim();
+  const m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return addDays(0);
+}
+function importCariHesapExcel(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi.'); event.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!rows.length){ alert('Excel dosyasında okunacak satır bulunamadı.'); return; }
+      let eklenen=0, atlanan=0;
+      rows.forEach(row=>{
+        const mukellef = pickField(row, 'Mükellef', 'Unvan', 'Firma');
+        const aciklama = pickField(row, 'Açıklama', 'Aciklama');
+        if(!mukellef || !aciklama){ atlanan++; return; }
+        const turRaw = pickField(row, 'Tür', 'Tur');
+        const tur = /alacak/i.test(turRaw) ? 'Alacak' : 'Borç';
+        const tutar = Number(String(row['Tutar']||'0').replace(',', '.')) || 0;
+        if(!tutar){ atlanan++; return; }
+        const yeniId = uid(DB.cariHesap);
+        const kayit = { id: yeniId, mukellef, tarih: parseTarihDegeri(row['Tarih']), aciklama, tur, tutar };
+        DB.cariHesap.push(kayit);
+        cariHesaptenKasaSenkronla(yeniId, kayit);
+        eklenen++;
+      });
+      renderCariHesap();
+      kaydet();
+      document.getElementById('status-msg').textContent = `${eklenen} hareket içe aktarıldı${atlanan?`, ${atlanan} satır atlandı`:''}`;
+      alert(`${eklenen} kayıt başarıyla içe aktarıldı.${atlanan?`\n${atlanan} satır mükellef/açıklama/tutar bilgisi eksik olduğu için atlandı.`:''}`);
+    }catch(err){
+      alert('Excel dosyası okunamadı. Dosyanın bozuk olmadığından emin olun.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+/* ------------ Tek Firma İçin Excel'den İçe Aktar (Mükellef sütunu gerekmez) ------------ */
+function openTekFirmaIceAktarModal(){
+  const mukellefler = mukellefListesiCikar();
+  renderModal(`
+    <h3>🏢📥 Tek Firma İçin İçe Aktar</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Excel dosyanızda "Mükellef" sütunu olmasa bile, seçtiğiniz firma için tüm satırları içe aktarır. Excel'de sadece Tarih, Açıklama, Tür, Tutar sütunları yeterli.</p>
+    <div class="field"><label>Mükellef</label>
+      <input id="f-tekFirmaAdi" list="tek-firma-datalist" placeholder="Firma adını yazın veya seçin">
+      <datalist id="tek-firma-datalist">
+        ${mukellefler.map(m=>`<option value="${esc(m)}">`).join('')}
+      </datalist>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="tekFirmaDosyaSec()">Devam Et — Dosya Seç</button>
+    </div>
+  `);
+  setTimeout(()=>document.getElementById('f-tekFirmaAdi')?.focus(), 50);
+}
+function tekFirmaDosyaSec(){
+  const mukellef = val('f-tekFirmaAdi');
+  if(!mukellef){ alert('Lütfen bir mükellef adı girin veya seçin.'); return; }
+  window.__tekFirmaSeciliMukellef = mukellef;
+  closeModal();
+  document.getElementById('tekFirmaExcelFile').click();
+}
+function importTekFirmaExcel(event){
+  const file = event.target.files[0];
+  const mukellef = window.__tekFirmaSeciliMukellef;
+  if(!file || !mukellef) return;
+  if(typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi.'); event.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!rows.length){ alert('Excel dosyasında okunacak satır bulunamadı.'); return; }
+      let eklenen=0, atlanan=0;
+      rows.forEach(row=>{
+        const aciklama = pickField(row, 'Açıklama', 'Aciklama');
+        if(!aciklama){ atlanan++; return; }
+        const turRaw = pickField(row, 'Tür', 'Tur');
+        const tur = /alacak/i.test(turRaw) ? 'Alacak' : 'Borç';
+        const tutar = Number(String(row['Tutar']||'0').replace(',', '.')) || 0;
+        if(!tutar){ atlanan++; return; }
+        const yeniId = uid(DB.cariHesap);
+        const kayit = { id: yeniId, mukellef, tarih: parseTarihDegeri(row['Tarih']), aciklama, tur, tutar };
+        DB.cariHesap.push(kayit);
+        cariHesaptenKasaSenkronla(yeniId, kayit);
+        eklenen++;
+      });
+      renderCariHesap();
+      kaydet();
+      document.getElementById('status-msg').textContent = `"${mukellef}" için ${eklenen} hareket içe aktarıldı${atlanan?`, ${atlanan} satır atlandı`:''}`;
+      alert(`"${mukellef}" için ${eklenen} kayıt başarıyla içe aktarıldı.${atlanan?`\n${atlanan} satır açıklama/tutar bilgisi eksik olduğu için atlandı.`:''}`);
+    }catch(err){
+      alert('Excel dosyası okunamadı. Dosyanın bozuk olmadığından emin olun.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+  window.__tekFirmaSeciliMukellef = null;
+}
+
+/* ------------ Firma Bazlı Temizleme (mükellefi listede tutar, sadece hareketlerini siler) ------------ */
+function openYilSonuDevirModal(){
+  const yillar = [...new Set(DB.cariHesap.map(h=>h.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  if(!yillar.length){ alert('Devredilecek herhangi bir hareket kaydı bulunamadı.'); return; }
+  renderModal(`
+    <h3>📅 Yıl Sonu Devri</h3>
+    <p class="page-sub" style="margin-top:-4px;">
+      Seçtiğin yılın 31 Aralık tarihindeki bakiyesi, tüm mükellefler için otomatik olarak bir sonraki yılın
+      1 Ocak tarihine "Devir" kaydı olarak eklenir. Geçmiş yılın hareketleri silinmez, olduğu gibi kalır.
+      Bakiyesi sıfır olan veya daha önce devri yapılmış mükellefler atlanır.
+    </p>
+    <div class="field"><label>Kapatılacak Yıl</label>
+      <select id="f-devirYil">
+        ${yillar.map(y=>`<option value="${y}">${y}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="yilSonuDevriYap()">Devri Uygula</button>
+    </div>
+  `);
+}
+function yilSonuDevriYap(){
+  const yil = val('f-devirYil');
+  if(!yil) return;
+  const sonrakiYil = Number(yil)+1;
+  const devirTarihi = `${sonrakiYil}-01-01`;
+  const devirAciklama = `${yil} Yılından Devir`;
+  const mukellefler = mukellefListesiCikar();
+  let olusturulan = 0, atlananVarOlan = 0, atlananSifir = 0;
+  mukellefler.forEach(m=>{
+    const varMi = DB.cariHesap.some(h=>h.mukellef===m && h.tarih===devirTarihi && h.aciklama===devirAciklama);
+    if(varMi){ atlananVarOlan++; return; }
+    const bakiye = DB.cariHesap
+      .filter(h=>h.mukellef===m && h.tarih<=`${yil}-12-31`)
+      .reduce((s,h)=> s + (h.tur==='Borç'? Number(h.tutar) : -Number(h.tutar)), 0);
+    if(Math.abs(bakiye) < 0.005){ atlananSifir++; return; }
+    DB.cariHesap.push({
+      id: uid(DB.cariHesap), mukellef: m, tarih: devirTarihi, aciklama: devirAciklama,
+      tur: bakiye>0 ? 'Borç' : 'Alacak', tutar: Math.abs(bakiye)
+    });
+    olusturulan++;
+  });
+  renderCariHesap();
+  kaydet();
+  closeModal();
+  document.getElementById('status-msg').textContent = `${olusturulan} mükellef için devir kaydı oluşturuldu`;
+  alert(`✅ ${yil} yılı devri tamamlandı.\n\nDevir kaydı oluşturulan: ${olusturulan}\nBakiyesi sıfır olduğu için atlanan: ${atlananSifir}\nDaha önce devri yapıldığı için atlanan: ${atlananVarOlan}`);
+}
+function openTumHareketleriTemizleModal(){
+  const adet = DB.cariHesap.length;
+  renderModal(`
+    <h3>🗑️ Tüm Hareketleri Temizle</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">
+      Bu işlem <strong>tüm mükelleflerin tüm hareketlerini (${adet} kayıt)</strong> kalıcı olarak siler.
+      Mükellef listesi silinmez, sadece hareketler ve bakiyeler sıfırlanır. <strong style="color:var(--danger);">Bu işlem geri alınamaz.</strong>
+    </p>
+    <div class="field"><label>Onaylamak için kutuya <strong>SİL</strong> yazın</label>
+      <input id="f-tumTemizleOnay" placeholder="SİL" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" style="background:var(--danger);border-color:var(--danger);" onclick="tumHareketleriTemizle()">Tüm Hareketleri Sil</button>
+    </div>
+  `);
+}
+function tumHareketleriTemizle(){
+  const onay = val('f-tumTemizleOnay');
+  if(onay !== 'SİL' && onay !== 'sil'){ alert('Onaylamak için kutuya tam olarak "SİL" yazmanız gerekiyor.'); return; }
+  const adet = DB.cariHesap.length;
+  if(!adet){ alert('Zaten hiç hareket kaydı yok.'); closeModal(); return; }
+  if(!confirm(`${adet} adet hareket kaydının TAMAMI silinecek. Mükellef listesi kalacak, sadece hareketler ve bakiyeler sıfırlanacak. Kesinlikle emin misiniz?`)) return;
+
+  DB.cariHesap = [];
+  DB.kasaHareket = (DB.kasaHareket||[]).filter(k=>k.kaynak!=='tahsilat');
+  closeModal();
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = `${adet} hareket kaydının tamamı silindi`;
+}
+function openFirmaTemizleModal(){
+  const mukellefler = mukellefListesiCikar();
+  if(!mukellefler.length){ alert('Kayıtlı mükellef bulunamadı.'); return; }
+  renderModal(`
+    <h3>🧹 Firma Bazlı Temizle</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Seçtiğiniz firmanın <strong>sadece hareketlerini</strong> siler — firma kendisi listede kalır, bakiyesi sıfırlanır. Yeniden başlamak için kullanışlıdır.</p>
+    <div class="field"><label>Mükellef</label>
+      <select id="f-temizlenecekMukellef">
+        ${mukellefler.map(m=>{
+          const adet = DB.cariHesap.filter(h=>h.mukellef===m).length;
+          return `<option value="${esc(m)}">${esc(m)} (${adet} hareket)</option>`;
+        }).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" style="background:var(--danger);border-color:var(--danger);" onclick="firmaTemizle()">Hareketleri Temizle</button>
+    </div>
+  `);
+}
+function firmaTemizle(){
+  const mukellef = val('f-temizlenecekMukellef');
+  if(!mukellef) return;
+  const adet = DB.cariHesap.filter(h=>h.mukellef===mukellef).length;
+  if(!adet){ alert('Bu firmanın zaten hiç hareketi yok.'); return; }
+  if(!confirm(`"${mukellef}" firmasının ${adet} adet hareketi silinecek ve bakiyesi sıfırlanacak. Firma listede kalacak. Emin misiniz?`)) return;
+
+  const silinecekIdler = DB.cariHesap.filter(h=>h.mukellef===mukellef).map(h=>h.id);
+  DB.cariHesap = DB.cariHesap.filter(h=>h.mukellef!==mukellef);
+  DB.kasaHareket = (DB.kasaHareket||[]).filter(k=> !(k.kaynak==='tahsilat' && silinecekIdler.includes(k.cariHesapId)));
+  // Firma listede kalmaya devam etsin diye mukellefListesi'ne ekli değilse ekle.
+  if(!DB.mukellefListesi) DB.mukellefListesi = [];
+  if(!DB.mukellefListesi.includes(mukellef)) DB.mukellefListesi.push(mukellef);
+
+  closeModal();
+  renderCariHesap();
+  kaydet();
+  document.getElementById('status-msg').textContent = `"${mukellef}" hareketleri temizlendi`;
+}
+
+/* ------------ JSON yedek al / yükle ------------ */
+function dosyaJsonDisaAktar(){
+  const blob = new Blob([JSON.stringify(DB, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cari-hesap-yedek-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById('status-msg').textContent = 'Yedek indirildi';
+}
+function dosyaJsonIceAktar(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      DB = Object.assign(seedData(), parsed);
+      renderCariHesap();
+      kaydet();
+      document.getElementById('status-msg').textContent = 'Yedekten yüklendi';
+    }catch(err){
+      alert('Dosya okunamadı. Geçerli bir yedek dosyası seçtiğinizden emin olun.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+/* ------------ Hesap Hareket Raporu (yazdırma penceresi üzerinden PDF) ------------ */
+async function cariHesapRaporuOlustur(mukellefParam){
+  const f = mukellefParam || aktifMukellefFiltre || '';
+  if(!f){ alert('Lütfen önce yukarıdaki filtreden bir mükellef seçin, ardından raporu oluşturun.'); return; }
+  const gizliDurum = tutarlarGizli;
+  tutarlarGizli = false;
+  const bakiyeMap = cariBakiyeMap();
+  const hareketler = DB.cariHesap.filter(h=>h.mukellef===f).sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  if(!hareketler.length){ tutarlarGizli = gizliDurum; alert('Bu mükellef için hareket kaydı bulunamadı.'); return; }
+  const toplamBorc = hareketler.filter(h=>h.tur==='Borç').reduce((s,h)=>s+Number(h.tutar),0);
+  const toplamAlacakTutari = hareketler.filter(h=>h.tur==='Alacak').reduce((s,h)=>s+Number(h.tutar),0);
+  const sonBakiye = toplamBorc - toplamAlacakTutari;
+  const bugun = new Date().toLocaleDateString('tr-TR', {day:'2-digit', month:'long', year:'numeric'});
+
+  const satirlar = hareketler.map(h=>`
+    <tr>
+      <td>${fmtDate(h.tarih)}</td>
+      <td>${esc(h.aciklama)}</td>
+      <td style="text-align:center;">${h.tur}</td>
+      <td style="text-align:right;">${fmtMoney(h.tutar)}</td>
+      <td style="text-align:right;font-weight:600;">${fmtMoney(bakiyeMap[h.id])}</td>
+    </tr>`).join('');
+
+  const icHtml = `
+    <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      <h1 style="font-size:20px;margin:0 0 4px;">Cari Hesap Hareket Raporu</h1>
+      <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;"><strong>${esc(f)}</strong><br>Rapor Tarihi: ${bugun}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr>
+          <th style="background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;">Tarih</th>
+          <th style="background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;">Açıklama</th>
+          <th style="background:#F3F1EB;text-align:center;padding:8px 10px;border-bottom:2px solid #1B2430;">Tür</th>
+          <th style="background:#F3F1EB;text-align:right;padding:8px 10px;border-bottom:2px solid #1B2430;">Tutar</th>
+          <th style="background:#F3F1EB;text-align:right;padding:8px 10px;border-bottom:2px solid #1B2430;">Bakiye</th>
+        </tr></thead>
+        <tbody>${satirlar.replace(/<td>/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;">').replace(/<td style="text-align:(center|right)([^"]*)">/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;text-align:$1$2">')}</tbody>
+      </table>
+      <div style="margin-top:22px;width:300px;margin-left:auto;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Borç</span><span>${fmtMoney(toplamBorc)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Alacak</span><span>${fmtMoney(toplamAlacakTutari)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;font-size:14.5px;font-weight:700;border-top:2px solid #1B2430;"><span>Güncel Bakiye</span><span>${fmtMoney(sonBakiye)}</span></div>
+      </div>
+      <div style="margin-top:44px;font-size:11px;color:#9FADB8;">Bu rapor Cari Hesap Takip tarafından ${bugun} tarihinde otomatik oluşturulmuştur.</div>
+    </div>`;
+
+  document.getElementById('status-msg').textContent = 'PDF oluşturuluyor…';
+  const basarili = await htmlToPdfIndir(icHtml, `cari-hesap-${f.replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ]/g,'-')}-${new Date().toISOString().slice(0,10)}.pdf`);
+  tutarlarGizli = gizliDurum;
+  document.getElementById('status-msg').textContent = basarili ? `"${f}" için PDF indirildi` : 'Hazır';
+}
+
+/* ------------ Tüm Mükellefler — Borçlu/Alacaklı Raporu (PDF) ------------ */
+function cariOzetFiltreli(aciklamaFiltre){
+  const q = (aciklamaFiltre||'').trim().toLowerCase();
+  const kaynakHareketler = q ? DB.cariHesap.filter(h=>h.aciklama.toLowerCase().includes(q)) : DB.cariHesap;
+  const gruplar = {};
+  kaynakHareketler.forEach(h=>{
+    if(!gruplar[h.mukellef]) gruplar[h.mukellef] = {mukellef:h.mukellef, toplamBorc:0, toplamAlacak:0};
+    if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
+    else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+  });
+  return Object.values(gruplar).map(g=>({...g, bakiye: g.toplamBorc - g.toplamAlacak}));
+}
+function tumMukelleflerRaporuModal(){
+  renderModal(`
+    <h3>📋 Tüm Borçlu/Alacaklı Raporu</h3>
+    <div class="field"><label>Rapor Kapsamı</label>
+      <select id="f-raporKapsam">
+        <option value="tumu">Tümü (Borçlu + Alacaklı + Sıfır) — ayrı bölümler halinde</option>
+        <option value="borclu">Sadece Borçlular</option>
+        <option value="alacakli">Sadece Alacaklılar</option>
+        <option value="sifir">Sadece Bakiyesi Sıfır Olanlar</option>
+      </select>
+    </div>
+    <div class="field"><label>Açıklamaya Göre Filtrele (opsiyonel)</label>
+      <input id="f-raporAciklamaFiltre" placeholder="Örn. e-defter saklama ücreti">
+      <p style="font-size:11px;color:var(--ink-soft);margin:6px 0 0;">Doldurursanız, sadece açıklaması bu metni içeren hareketler hesaba katılır — örn. sadece "e-defter saklama ücreti" kalemine göre kimin borçlu/ödemiş olduğunu görürsünüz.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="tumMukelleflerRaporuOlustur()">Rapor Oluştur</button>
+    </div>
+  `);
+}
+async function tumMukelleflerRaporuOlustur(){
+  const kapsam = val('f-raporKapsam') || 'tumu';
+  const aciklamaFiltre = val('f-raporAciklamaFiltre');
+  const ozet = cariOzetFiltreli(aciklamaFiltre);
+  if(!ozet.length){ alert(aciklamaFiltre ? `"${aciklamaFiltre}" açıklamasını içeren hareket bulunamadı.` : 'Kayıtlı hareket bulunamadı.'); return; }
+  const gizliDurum = tutarlarGizli;
+  tutarlarGizli = false;
+  const bugun = new Date().toLocaleDateString('tr-TR', {day:'2-digit', month:'long', year:'numeric'});
+
+  const borclular = ozet.filter(o=>o.bakiye>0).sort((a,b)=>b.bakiye-a.bakiye);
+  const alacaklilar = ozet.filter(o=>o.bakiye<0).sort((a,b)=>a.bakiye-b.bakiye);
+  const denkler = ozet.filter(o=>o.bakiye===0);
+
+  const toplamBorc = ozet.reduce((s,o)=>s+o.toplamBorc,0);
+  const toplamAlacak = ozet.reduce((s,o)=>s+o.toplamAlacak,0);
+  const genelBakiye = toplamBorc - toplamAlacak;
+
+  const thStil = 'background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;';
+  const thSagStil = 'background:#F3F1EB;text-align:right;padding:8px 10px;border-bottom:2px solid #1B2430;';
+  const tdStil = 'padding:7px 10px;border-bottom:1px solid #E3E0D6;';
+
+  const satirYap = (o) => `
+    <tr>
+      <td style="${tdStil}">${esc(o.mukellef)}</td>
+      <td style="${tdStil}text-align:right;">${fmtMoney(o.toplamBorc)}</td>
+      <td style="${tdStil}text-align:right;">${fmtMoney(o.toplamAlacak)}</td>
+      <td style="${tdStil}text-align:right;font-weight:700;">${fmtMoney(o.bakiye)}</td>
+    </tr>`;
+
+  const bolumYap = (baslik, liste) => liste.length ? `
+    <h2 style="font-size:14px;margin:28px 0 8px;">${baslik} (${liste.length})</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;">
+      <thead><tr>
+        <th style="${thStil}">Mükellef</th><th style="${thSagStil}">Toplam Borç</th><th style="${thSagStil}">Toplam Alacak</th><th style="${thSagStil}">Bakiye</th>
+      </tr></thead>
+      <tbody>${liste.map(satirYap).join('')}</tbody>
+    </table>` : `<h2 style="font-size:14px;margin:28px 0 8px;">${baslik} (0)</h2><div style="color:#9FADB8;font-size:12px;padding:6px 0;">Kayıt yok.</div>`;
+
+  let govde = '';
+  let baslik = 'Tüm Mükellefler — Borçlu / Alacaklı Raporu';
+  if(kapsam==='borclu'){ govde = bolumYap('🔴 Borçlu Mükellefler', borclular); baslik = 'Borçlu Mükellefler Raporu'; }
+  else if(kapsam==='alacakli'){ govde = bolumYap('🟢 Alacaklı Mükellefler', alacaklilar); baslik = 'Alacaklı Mükellefler Raporu'; }
+  else if(kapsam==='sifir'){ govde = bolumYap('⚪ Bakiyesi Sıfır Olanlar', denkler); baslik = 'Bakiyesi Sıfır Olan Mükellefler Raporu'; }
+  else { govde = bolumYap('🔴 Borçlu Mükellefler', borclular) + bolumYap('🟢 Alacaklı Mükellefler', alacaklilar) + (denkler.length ? bolumYap('⚪ Bakiyesi Sıfır Olanlar', denkler) : ''); }
+
+  const icHtml = `
+    <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      <h1 style="font-size:20px;margin:0 0 4px;">${esc(baslik)}</h1>
+      <div style="color:#5B6672;font-size:13px;margin-bottom:22px;">Rapor Tarihi: ${bugun} · Toplam ${ozet.length} mükellef${aciklamaFiltre?` · Açıklama filtresi: "${esc(aciklamaFiltre)}"`:''}</div>
+      ${govde}
+      <div style="margin-top:26px;width:320px;margin-left:auto;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Borç (genel)</span><span>${fmtMoney(toplamBorc)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Alacak (genel)</span><span>${fmtMoney(toplamAlacak)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;font-size:14.5px;font-weight:700;border-top:2px solid #1B2430;"><span>Genel Bakiye</span><span>${fmtMoney(genelBakiye)}</span></div>
+      </div>
+      <div style="margin-top:40px;font-size:11px;color:#9FADB8;">Bu rapor Cari Hesap Takip tarafından ${bugun} tarihinde otomatik oluşturulmuştur.</div>
+    </div>`;
+
+  document.getElementById('status-msg').textContent = 'PDF oluşturuluyor…';
+  const dosyaAdi = `${baslik.toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  const basarili = await htmlToPdfIndir(icHtml, dosyaAdi);
+  tutarlarGizli = gizliDurum;
+  closeModal();
+  document.getElementById('status-msg').textContent = basarili ? 'PDF indirildi' : 'Hazır';
+}
+
+/* ============================================================
+   BULUT SENKRONU — Firebase Authentication + Realtime Database
+   ============================================================ */
+const auth = firebase.auth();
+const rtdb = firebase.database();
+let rtdbRef = null;
+let bulutHazir = false;
+let yerelDegisiklikBayragi = false;
+
+function girisYap(){
+  const email = document.getElementById('login-email').value.trim();
+  const sifre = document.getElementById('login-pass').value;
+  const hataEl = document.getElementById('login-error');
+  const durumEl = document.getElementById('login-status');
+  hataEl.textContent = '';
+  if(!email || !sifre){ hataEl.textContent = 'E-posta ve şifre gerekli.'; return; }
+  durumEl.textContent = 'Giriş yapılıyor…';
+  auth.signInWithEmailAndPassword(email, sifre)
+    .catch(err=>{
+      durumEl.textContent = '';
+      const mesajlar = {
+        'auth/invalid-email': 'Geçersiz e-posta.',
+        'auth/user-not-found': 'Kullanıcı bulunamadı.',
+        'auth/wrong-password': 'Şifre hatalı.',
+        'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+        'auth/too-many-requests': 'Çok fazla deneme yapıldı, biraz sonra tekrar dene.'
+      };
+      hataEl.textContent = mesajlar[err.code] || ('Giriş başarısız: ' + err.message);
+    });
+}
+
+async function bulutaYaz(){
+  if(!bulutHazir || !rtdbRef) return;
+  yerelDegisiklikBayragi = true;
+  try{ await rtdbRef.set(DB); }catch(e){ console.error('Bulut yazma hatası:', e); }
+}
+
+function buluttanDinlemeyeBasla(){
+  rtdbRef = rtdb.ref('cariHesapVerisi');
+  rtdbRef.on('value', (snapshot)=>{
+    if(yerelDegisiklikBayragi){ yerelDegisiklikBayragi = false; return; }
+    const uzak = snapshot.val();
+    if(uzak){
+      DB = uzak;
+      idbSet(LS_KEY, DB);
+      renderCariHesap();
+      document.getElementById('status-msg').textContent = '☁️ Başka bir cihazdan güncellendi';
+    }
+  });
+}
+
+auth.onAuthStateChanged(async (user)=>{
+  const overlay = document.getElementById('login-overlay');
+  if(user){
+    overlay.style.display = 'none';
+    rtdbRef = rtdb.ref('cariHesapVerisi');
+    let uzakVeri = null;
+    try{
+      const ilkOkuma = await rtdbRef.once('value');
+      uzakVeri = ilkOkuma.val();
+    }catch(e){ console.error('İlk bulut okuma hatası:', e); }
+
+    if(uzakVeri){
+      DB = uzakVeri;
+      if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
+      await idbSet(LS_KEY, DB);
+    }else{
+      const yerel = await yukle();
+      DB = yerel ? Object.assign({cariHesap:[],mukellefListesi:[],kasaHareket:[]}, yerel) : seedData();
+      bulutHazir = true;
+      await bulutaYaz();
+    }
+    bulutHazir = true;
+    document.getElementById('tutar-gizle-btn').textContent = tutarlarGizli ? '🙈' : '👁️';
+    renderCariHesap();
+    tickClock();
+    setInterval(tickClock, 1000);
+    buluttanDinlemeyeBasla();
+  }else{
+    overlay.style.display = 'flex';
+    bulutHazir = false;
+  }
+});
+
+// Service worker yalnızca http/https üzerinden barındırıldığında (file:// üzerinde çalışmaz) çevrimdışı önbellekleme sağlar.
+if('serviceWorker' in navigator && (location.protocol==='http:'||location.protocol==='https:')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+</script>
+</body>
+</html>
