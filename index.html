@@ -312,11 +312,24 @@
   <div class="toolbar">
     <button class="btn primary" onclick="openKasaHareketModal(null,'Gider')">➖ Gider Ekle</button>
     <button class="btn" onclick="openKasaHareketModal(null,'Giriş')">➕ Diğer Giriş Ekle</button>
+    <select class="filter" id="kasa-yil-filter" onchange="renderKasa()">
+      <option value="">Tüm Yıllar</option>
+    </select>
+    <select class="filter" id="kasa-ay-filter" onchange="renderKasa()">
+      <option value="">Tüm Aylar</option>
+      <option value="01">Ocak</option><option value="02">Şubat</option><option value="03">Mart</option>
+      <option value="04">Nisan</option><option value="05">Mayıs</option><option value="06">Haziran</option>
+      <option value="07">Temmuz</option><option value="08">Ağustos</option><option value="09">Eylül</option>
+      <option value="10">Ekim</option><option value="11">Kasım</option><option value="12">Aralık</option>
+    </select>
+    <button class="btn" style="background:#5B7A6F;border-color:#5B7A6F;color:#fff;" onclick="openAySonuDevirModal()">📅 Ay Kapat ve Devret</button>
+    <button class="btn" onclick="kasaHareketRaporuOlustur()">📄 Kasa Hareket Raporu (PDF)</button>
     <button class="btn" onclick="exportKasaExcel()">📊 Excel'e Aktar</button>
+    <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openKasaTemizleModal()">🗑️ Kasayı Temizle</button>
   </div>
 
   <div class="panel">
-    <h3>Kasa Hareketleri</h3>
+    <h3 id="kasa-hareketleri-baslik">Kasa Hareketleri</h3>
     <div class="table-scroll">
     <table>
       <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tür</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
@@ -332,7 +345,7 @@
 <div class="layout">
   <div class="main" style="width:100%;">
   <h1 class="page-title">Analiz</h1>
-  <p class="page-sub">Mükelleflere kestiğin ücretlere (cari hesaptaki Borç kayıtları) göre aylık/yıllık kazanç analizi — tahsil edilip edilmediğine bakılmaksızın.</p>
+  <p class="page-sub">Mükelleflere kestiğin ücretlerden (cari hesaptaki Borç kayıtları) kasadaki giderlerin düşülmesiyle hesaplanan net kazanç analizi — tahsil edilip edilmediğine bakılmaksızın.</p>
 
   <div class="cards" id="analiz-ozet-cards"></div>
 
@@ -518,21 +531,31 @@ document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.
    CARİ HESAP — mantık (ana programdakiyle aynı)
    ============================================================ */
 function cariOzet(){
-  const gruplar = {};
+  const bakiyeMap = cariBakiyeMap();
+  const devirMi = (h)=> h.kaynak==='devir' || /Yılından Devir$/.test(h.aciklama||'');
+  const gruplar = {}; const sonHareket = {};
   DB.cariHesap.forEach(h=>{
     if(!gruplar[h.mukellef]) gruplar[h.mukellef] = {mukellef:h.mukellef, toplamBorc:0, toplamAlacak:0};
-    if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
-    else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+    if(!devirMi(h)){
+      if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
+      else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+    }
+    if(!sonHareket[h.mukellef] || h.tarih > sonHareket[h.mukellef].tarih || (h.tarih===sonHareket[h.mukellef].tarih && h.id > sonHareket[h.mukellef].id)) sonHareket[h.mukellef] = h;
   });
-  return Object.values(gruplar).map(g=>({...g, bakiye: g.toplamBorc - g.toplamAlacak}));
+  return Object.values(gruplar).map(g=>({...g, bakiye: bakiyeMap[sonHareket[g.mukellef].id]}));
 }
 function cariBakiyeMap(){
   const map = {}; const gruplu = {};
   DB.cariHesap.forEach(h=>{ (gruplu[h.mukellef] = gruplu[h.mukellef]||[]).push(h); });
+  const devirMi = (h)=> h.kaynak==='devir' || /Yılından Devir$/.test(h.aciklama||'');
   Object.values(gruplu).forEach(liste=>{
     liste.sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
     let running = 0;
-    liste.forEach(h=>{ running += (h.tur==='Borç' ? Number(h.tutar) : -Number(h.tutar)); map[h.id] = running; });
+    liste.forEach(h=>{
+      // Devir kaydı, o ana kadarki bakiyeyi taşımak için var — üstüne bir daha eklenmez (yoksa bakiye ikiye katlanır).
+      if(!devirMi(h)){ running += (h.tur==='Borç' ? Number(h.tutar) : -Number(h.tutar)); }
+      map[h.id] = running;
+    });
   });
   return map;
 }
@@ -696,27 +719,47 @@ function sayfaGoster(sayfa){
 function kasaBakiyeMap(){
   const liste = [...(DB.kasaHareket||[])].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
   const map = {}; let running = 0;
-  liste.forEach(k=>{ running += (k.tur==='Giriş' ? Number(k.tutar) : -Number(k.tutar)); map[k.id] = running; });
+  liste.forEach(k=>{
+    // Devir kaydı, o ana kadarki bakiyeyi taşımak için var — üstüne bir daha eklenmez (yoksa bakiye ikiye katlanır).
+    if(k.kaynak !== 'devir'){ running += (k.tur==='Giriş' ? Number(k.tutar) : -Number(k.tutar)); }
+    map[k.id] = running;
+  });
   return map;
 }
 function renderKasa(){
   if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
   const bakiyeMap = kasaBakiyeMap();
-  const toplamGiris = DB.kasaHareket.filter(k=>k.tur==='Giriş').reduce((s,k)=>s+Number(k.tutar),0);
-  const toplamGider = DB.kasaHareket.filter(k=>k.tur==='Gider').reduce((s,k)=>s+Number(k.tutar),0);
-  const kasaBakiye = toplamGiris - toplamGider;
+
+  const yilSel = document.getElementById('kasa-yil-filter');
+  const yillar = [...new Set(DB.kasaHareket.map(k=>k.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  const mevcutSecim = yilSel.value;
+  yilSel.innerHTML = `<option value="">Tüm Yıllar</option>` + yillar.map(y=>`<option value="${y}" ${mevcutSecim===y?'selected':''}>${y}</option>`).join('');
+  const yilF = yilSel.value;
+  const ayF = document.getElementById('kasa-ay-filter').value;
+  const filtreAktif = !!(yilF || ayF);
+
+  const siraliTumu = [...DB.kasaHareket].sort((a,b)=> b.tarih===a.tarih ? b.id-a.id : b.tarih.localeCompare(a.tarih));
+  const siraliListe = siraliTumu.filter(k=> (!yilF || k.tarih.slice(0,4)===yilF) && (!ayF || k.tarih.slice(5,7)===ayF) );
+
+  const toplamGiris = siraliListe.filter(k=>k.tur==='Giriş' && k.kaynak!=='devir').reduce((s,k)=>s+Number(k.tutar),0);
+  const toplamGider = siraliListe.filter(k=>k.tur==='Gider' && k.kaynak!=='devir').reduce((s,k)=>s+Number(k.tutar),0);
+  const kasaBakiye = siraliListe.length ? bakiyeMap[siraliListe[0].id] : (siraliTumu.length ? bakiyeMap[siraliTumu[0].id] : 0);
+
   document.getElementById('kasa-ozet-cards').innerHTML = [
-    {label:"Toplam Giriş (Tahsilat + Diğer)", value:fmtMoney(toplamGiris), cls:""},
-    {label:"Toplam Gider", value:fmtMoney(toplamGider), cls:""},
+    {label: filtreAktif ? "Dönem Girişi" : "Toplam Giriş (Tahsilat + Diğer)", value:fmtMoney(toplamGiris), cls:""},
+    {label: filtreAktif ? "Dönem Gideri" : "Toplam Gider", value:fmtMoney(toplamGider), cls:""},
     {label:"Kasa Bakiyesi", value:fmtMoney(kasaBakiye), cls:kasaBakiye<0?"warn":"ok"}
   ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
 
-  const siraliListe = [...DB.kasaHareket].sort((a,b)=> b.tarih===a.tarih ? b.id-a.id : b.tarih.localeCompare(a.tarih));
+  document.getElementById('kasa-hareketleri-baslik').textContent = filtreAktif
+    ? `Kasa Hareketleri — ${siraliListe.length}/${siraliTumu.length} gösteriliyor`
+    : 'Kasa Hareketleri';
+
   const tbody = document.getElementById('tbl-kasa');
   tbody.innerHTML = siraliListe.length ? siraliListe.map(k=>`
     <tr>
       <td data-label="Tarih">${fmtDate(k.tarih)}</td>
-      <td data-label="Açıklama">${esc(k.aciklama)}${k.kaynak==='tahsilat'?' <span style="font-size:10.5px;color:var(--accent);">🔗 Cari Hesaptan</span>':''}</td>
+      <td data-label="Açıklama">${esc(k.aciklama)}${k.kaynak==='tahsilat'?' <span style="font-size:10.5px;color:var(--accent);">🔗 Cari Hesaptan</span>':(k.kaynak==='devir'?' <span style="font-size:10.5px;color:#5B7A6F;">📅 Devir</span>':'')}</td>
       <td data-label="Tür"><span style="font-weight:600;color:${k.tur==='Giriş'?'var(--accent)':'var(--danger)'}">${k.tur}</span></td>
       <td data-label="Tutar">${fmtMoney(k.tutar)}</td>
       <td data-label="Bakiye"><strong style="color:${bakiyeMap[k.id]<0?'var(--danger)':'inherit'}">${fmtMoney(bakiyeMap[k.id])}</strong></td>
@@ -727,7 +770,7 @@ function renderKasa(){
           : `<button class="icon-btn" onclick="openKasaHareketModal(${k.id})">✎</button>
              <button class="icon-btn del" onclick="deleteKasaHareket(${k.id})">🗑</button>`}
       </div></td>
-    </tr>`).join('') : `<tr><td class="cell-empty" colspan="6"><div class="empty">Kasa hareketi bulunamadı.</div></td></tr>`;
+    </tr>`).join('') : `<tr><td class="cell-empty" colspan="6"><div class="empty">${filtreAktif?'Bu dönem için kasa hareketi bulunamadı.':'Kasa hareketi bulunamadı.'}</div></td></tr>`;
 }
 function openKasaHareketModal(id, turOnerilen){
   const item = id ? DB.kasaHareket.find(k=>k.id===id) : null;
@@ -735,9 +778,21 @@ function openKasaHareketModal(id, turOnerilen){
     alert('Bu kayıt bir cari hesap tahsilatından otomatik geldi. Düzenlemek için ilgili mükellefin cari hesap hareketini düzenleyin.');
     return;
   }
+  let varsayilanTarih = addDays(0);
+  if(!item){
+    const yilF = document.getElementById('kasa-yil-filter')?.value || '';
+    const ayF = document.getElementById('kasa-ay-filter')?.value || '';
+    if(yilF || ayF){
+      const bugun = new Date();
+      const yil = yilF || String(bugun.getFullYear());
+      const ay = ayF || String(bugun.getMonth()+1).padStart(2,'0');
+      const bugunAyUyuyor = yil===String(bugun.getFullYear()) && ay===String(bugun.getMonth()+1).padStart(2,'0');
+      varsayilanTarih = bugunAyUyuyor ? addDays(0) : `${yil}-${ay}-01`;
+    }
+  }
   renderModal(`
     <h3>${item ? 'Kasa Hareketini Düzenle' : (turOnerilen==='Gider' ? '➖ Gider Ekle' : '➕ Giriş Ekle')}</h3>
-    <div class="field"><label>Tarih</label><input id="f-kasaTarih" type="date" value="${item?item.tarih:addDays(0)}"></div>
+    <div class="field"><label>Tarih</label><input id="f-kasaTarih" type="date" value="${item?item.tarih:varsayilanTarih}"></div>
     <div class="field"><label>Açıklama</label><input id="f-kasaAciklama" value="${item?esc(item.aciklama):''}" placeholder="Örn. Ofis kirası, kırtasiye, elektrik faturası"></div>
     <div class="field"><label>Tür</label>
       <select id="f-kasaTur">
@@ -783,11 +838,67 @@ function deleteKasaHareket(id){
   kaydet();
   document.getElementById('status-msg').textContent = 'Kasa hareketi silindi';
 }
+async function kasaHareketRaporuOlustur(){
+  if(!DB.kasaHareket.length){ alert('Kasa hareketi bulunamadı.'); return; }
+  const gizliDurum = tutarlarGizli;
+  tutarlarGizli = false;
+  const yilF = document.getElementById('kasa-yil-filter')?.value || '';
+  const ayF = document.getElementById('kasa-ay-filter')?.value || '';
+  const bakiyeMap = kasaBakiyeMap();
+  const tumHareketler = [...DB.kasaHareket].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  const hareketler = tumHareketler.filter(k=>
+    (!yilF || k.tarih.slice(0,4)===yilF) &&
+    (!ayF || k.tarih.slice(5,7)===ayF)
+  );
+  if(!hareketler.length){ tutarlarGizli = gizliDurum; alert('Bu dönem için kasa hareketi bulunamadı.'); return; }
+  const donemEtiketi = yilF ? (ayF ? `${KASA_AY_ADLARI[Number(ayF)-1]} ${yilF}` : `${yilF} Yılı`) : 'Tüm Zamanlar';
+  const toplamGiris = hareketler.filter(k=>k.tur==='Giriş').reduce((s,k)=>s+Number(k.tutar),0);
+  const toplamGider = hareketler.filter(k=>k.tur==='Gider').reduce((s,k)=>s+Number(k.tutar),0);
+  const sonBakiye = bakiyeMap[hareketler[hareketler.length-1].id];
+  const bugun = new Date().toLocaleDateString('tr-TR', {day:'2-digit', month:'long', year:'numeric'});
+
+  const satirlar = hareketler.map(k=>`
+    <tr>
+      <td>${fmtDate(k.tarih)}</td>
+      <td>${esc(k.aciklama)}${k.kaynak==='tahsilat'?' (Cari Hesap Tahsilatı)':(k.kaynak==='devir'?' (Devir)':'')}</td>
+      <td style="text-align:center;">${k.tur}</td>
+      <td style="text-align:right;">${fmtMoney(k.tutar)}</td>
+      <td style="text-align:right;font-weight:600;">${fmtMoney(bakiyeMap[k.id])}</td>
+    </tr>`).join('');
+
+  const icHtml = `
+    <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      <h1 style="font-size:20px;margin:0 0 4px;">Kasa Hareket Raporu</h1>
+      <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;">Dönem: <strong>${donemEtiketi}</strong><br>Rapor Tarihi: ${bugun}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr>
+          <th style="background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;">Tarih</th>
+          <th style="background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;">Açıklama</th>
+          <th style="background:#F3F1EB;text-align:center;padding:8px 10px;border-bottom:2px solid #1B2430;">Tür</th>
+          <th style="background:#F3F1EB;text-align:right;padding:8px 10px;border-bottom:2px solid #1B2430;">Tutar</th>
+          <th style="background:#F3F1EB;text-align:right;padding:8px 10px;border-bottom:2px solid #1B2430;">Bakiye</th>
+        </tr></thead>
+        <tbody>${satirlar.replace(/<td>/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;">').replace(/<td style="text-align:(center|right)([^"]*)">/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;text-align:$1$2">')}</tbody>
+      </table>
+      <div style="margin-top:22px;width:300px;margin-left:auto;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>${yilF?'Dönem ':''}Toplam Giriş</span><span>${fmtMoney(toplamGiris)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>${yilF?'Dönem ':''}Toplam Gider</span><span>${fmtMoney(toplamGider)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;font-size:14.5px;font-weight:700;border-top:2px solid #1B2430;"><span>Kasa Bakiyesi</span><span>${fmtMoney(sonBakiye)}</span></div>
+      </div>
+      <div style="margin-top:44px;font-size:11px;color:#9FADB8;">Bu rapor Cari Hesap Takip tarafından ${bugun} tarihinde otomatik oluşturulmuştur.</div>
+    </div>`;
+
+  document.getElementById('status-msg').textContent = 'PDF oluşturuluyor…';
+  const dosyaAdi = `kasa-raporu-${(yilF?yilF+(ayF?'-'+ayF:''):'tum-zamanlar')}.pdf`;
+  const basarili = await htmlToPdfIndir(icHtml, dosyaAdi);
+  tutarlarGizli = gizliDurum;
+  document.getElementById('status-msg').textContent = basarili ? 'Kasa raporu PDF indirildi' : 'Hazır';
+}
 function exportKasaExcel(){
   if(typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.'); return; }
   const bakiyeMap = kasaBakiyeMap();
   const rows = [...(DB.kasaHareket||[])].sort((a,b)=>a.tarih.localeCompare(b.tarih)).map(k=>({
-    "Tarih": k.tarih, "Açıklama": k.aciklama, "Tür": k.tur, "Tutar": k.tutar, "Bakiye": bakiyeMap[k.id], "Kaynak": k.kaynak==='tahsilat'?'Cari Hesap Tahsilatı':'Manuel'
+    "Tarih": k.tarih, "Açıklama": k.aciklama, "Tür": k.tur, "Tutar": k.tutar, "Bakiye": bakiyeMap[k.id], "Kaynak": k.kaynak==='tahsilat'?'Cari Hesap Tahsilatı':(k.kaynak==='devir'?'Ay Devri':'Manuel')
   }));
   if(!rows.length){ alert('Kasa hareketi bulunamadı.'); return; }
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -796,6 +907,66 @@ function exportKasaExcel(){
   XLSX.utils.book_append_sheet(wb, ws, "Kasa");
   XLSX.writeFile(wb, "kasa-" + new Date().toISOString().slice(0,10) + ".xlsx");
   document.getElementById('status-msg').textContent = 'Kasa Excel olarak dışa aktarıldı';
+}
+
+/* ------------ Kasa Ay Sonu Devri ------------ */
+const KASA_AY_ADLARI = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+function openAySonuDevirModal(){
+  if(!DB.kasaHareket.length){ alert('Devredilecek herhangi bir kasa hareketi bulunamadı.'); return; }
+  const yillar = [...new Set(DB.kasaHareket.map(k=>k.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  const buYil = new Date().getFullYear().toString();
+  const buAy = String(new Date().getMonth()+1).padStart(2,'0');
+  renderModal(`
+    <h3>📅 Ay Kapat ve Devret</h3>
+    <p class="page-sub" style="margin-top:-4px;">
+      Seçtiğin ayın sonundaki kasa bakiyesi, bir sonraki ayın 1'ine otomatik olarak devir kaydı
+      (bakiye pozitifse Giriş, negatifse Gider) olarak eklenir. O ayın hareketleri silinmez, olduğu gibi kalır.
+    </p>
+    <div class="field"><label>Yıl</label>
+      <select id="f-kasaDevirYil">${yillar.map(y=>`<option ${y===buYil?'selected':''}>${y}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Ay</label>
+      <select id="f-kasaDevirAy">${KASA_AY_ADLARI.map((ad,i)=>{const v=String(i+1).padStart(2,'0'); return `<option value="${v}" ${v===buAy?'selected':''}>${ad}</option>`;}).join('')}</select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="kasaAySonuDevriYap()">Devri Uygula</button>
+    </div>
+  `);
+}
+function kasaAySonuDevriYap(){
+  const yil = val('f-kasaDevirYil');
+  const ay = val('f-kasaDevirAy');
+  if(!yil || !ay) return;
+  let sonrakiAyNum = Number(ay) + 1, sonrakiYil = Number(yil);
+  if(sonrakiAyNum > 12){ sonrakiAyNum = 1; sonrakiYil += 1; }
+  const sonrakiAy = String(sonrakiAyNum).padStart(2,'0');
+  const devirTarihi = `${sonrakiYil}-${sonrakiAy}-01`;
+  const devirAciklama = `${KASA_AY_ADLARI[Number(ay)-1]} ${yil} Kasa Devri`;
+
+  const varMi = DB.kasaHareket.some(k=>k.tarih===devirTarihi && k.aciklama===devirAciklama && k.kaynak==='devir');
+  if(varMi){ alert('Bu ay için devir zaten yapılmış.'); return; }
+
+  const ayinSonu = `${yil}-${ay}-31`;
+  const kronolojik = [...DB.kasaHareket].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  let running = 0, sonBakiye = 0, bulundu = false;
+  kronolojik.forEach(k=>{
+    if(k.tarih <= ayinSonu){
+      if(k.kaynak !== 'devir'){ running += (k.tur==='Giriş'?Number(k.tutar):-Number(k.tutar)); }
+      sonBakiye = running; bulundu = true;
+    }
+  });
+  if(!bulundu){ alert('Bu ay ve öncesinde herhangi bir kasa hareketi bulunamadı.'); return; }
+  if(Math.abs(sonBakiye) < 0.005){ alert('Bu ayın sonundaki kasa bakiyesi sıfır, devredilecek bir tutar yok.'); return; }
+
+  DB.kasaHareket.push({
+    id: uid(DB.kasaHareket), tarih: devirTarihi, aciklama: devirAciklama,
+    tur: sonBakiye>=0 ? 'Giriş' : 'Gider', tutar: Math.abs(sonBakiye), kaynak: 'devir'
+  });
+  closeModal();
+  renderKasa();
+  kaydet();
+  document.getElementById('status-msg').textContent = `${devirAciklama} oluşturuldu (${fmtMoney(sonBakiye)})`;
 }
 
 /* ============================================================
@@ -808,32 +979,47 @@ function analizGrafikRenkleri(){
 }
 function renderAnaliz(){
   const ucretler = DB.cariHesap.filter(h=>h.tur==='Borç');
+  const giderler = (DB.kasaHareket||[]).filter(k=>k.tur==='Gider' && k.kaynak!=='devir');
   const yilSel = document.getElementById('analiz-yil-secim');
-  const yillar = [...new Set(ucretler.map(h=>h.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  const yillar = [...new Set([...ucretler.map(h=>h.tarih.slice(0,4)), ...giderler.map(k=>k.tarih.slice(0,4))])].sort((a,b)=>b.localeCompare(a));
   const mevcutSecim = yilSel.value;
   yilSel.innerHTML = yillar.length ? yillar.map(y=>`<option ${mevcutSecim===y?'selected':(!mevcutSecim && y===yillar[0]?'selected':'')}>${y}</option>`).join('') : '<option value="">Kayıt yok</option>';
   const seciliYil = yilSel.value;
 
-  const yilToplamlari = {};
-  yillar.forEach(y=>{ yilToplamlari[y] = ucretler.filter(h=>h.tarih.slice(0,4)===y).reduce((s,h)=>s+Number(h.tutar),0); });
-
-  const aylikToplamlar = new Array(12).fill(0);
-  ucretler.filter(h=>h.tarih.slice(0,4)===seciliYil).forEach(h=>{
-    const ayIndex = Number(h.tarih.slice(5,7)) - 1;
-    if(ayIndex>=0 && ayIndex<12) aylikToplamlar[ayIndex] += Number(h.tutar);
+  const yilUcretToplamlari = {}, yilGiderToplamlari = {};
+  yillar.forEach(y=>{
+    yilUcretToplamlari[y] = ucretler.filter(h=>h.tarih.slice(0,4)===y).reduce((s,h)=>s+Number(h.tutar),0);
+    yilGiderToplamlari[y] = giderler.filter(k=>k.tarih.slice(0,4)===y).reduce((s,k)=>s+Number(k.tutar),0);
   });
 
-  const seciliYilToplami = yilToplamlari[seciliYil] || 0;
-  const doluAySayisi = aylikToplamlar.filter(v=>v>0).length || 1;
-  const ortalamaAylik = seciliYilToplami / doluAySayisi;
-  const enYuksekAyIndex = aylikToplamlar.indexOf(Math.max(...aylikToplamlar));
-  const tumZamanlarToplami = ucretler.reduce((s,h)=>s+Number(h.tutar),0);
+  const aylikUcret = new Array(12).fill(0), aylikGider = new Array(12).fill(0);
+  ucretler.filter(h=>h.tarih.slice(0,4)===seciliYil).forEach(h=>{
+    const ayIndex = Number(h.tarih.slice(5,7)) - 1;
+    if(ayIndex>=0 && ayIndex<12) aylikUcret[ayIndex] += Number(h.tutar);
+  });
+  giderler.filter(k=>k.tarih.slice(0,4)===seciliYil).forEach(k=>{
+    const ayIndex = Number(k.tarih.slice(5,7)) - 1;
+    if(ayIndex>=0 && ayIndex<12) aylikGider[ayIndex] += Number(k.tutar);
+  });
+  const aylikNet = aylikUcret.map((v,i)=>v - aylikGider[i]);
+
+  const seciliYilUcret = yilUcretToplamlari[seciliYil] || 0;
+  const seciliYilGider = yilGiderToplamlari[seciliYil] || 0;
+  const seciliYilNet = seciliYilUcret - seciliYilGider;
+  const doluAySayisi = aylikNet.filter(v=>v!==0).length || 1;
+  const ortalamaAylikNet = seciliYilNet / doluAySayisi;
+  const enYuksekAyIndex = aylikNet.indexOf(Math.max(...aylikNet));
+  const tumZamanlarUcret = ucretler.reduce((s,h)=>s+Number(h.tutar),0);
+  const tumZamanlarGider = giderler.reduce((s,k)=>s+Number(k.tutar),0);
+  const tumZamanlarNet = tumZamanlarUcret - tumZamanlarGider;
 
   document.getElementById('analiz-ozet-cards').innerHTML = [
-    {label:`${seciliYil||'-'} Toplamı`, value:fmtMoney(seciliYilToplami), cls:""},
-    {label:`${seciliYil||'-'} Ortalama Aylık`, value:fmtMoney(ortalamaAylik), cls:""},
-    {label:"En Yüksek Ay", value: aylikToplamlar[enYuksekAyIndex]>0 ? `${AY_ISIMLERI[enYuksekAyIndex]} (${fmtMoney(aylikToplamlar[enYuksekAyIndex])})` : '-', cls:""},
-    {label:"Tüm Zamanlar Toplamı", value:fmtMoney(tumZamanlarToplami), cls:""}
+    {label:`${seciliYil||'-'} Ücret Toplamı`, value:fmtMoney(seciliYilUcret), cls:""},
+    {label:`${seciliYil||'-'} Gider Toplamı`, value:fmtMoney(seciliYilGider), cls:""},
+    {label:`${seciliYil||'-'} Net Kazanç`, value:fmtMoney(seciliYilNet), cls:seciliYilNet<0?"warn":"ok"},
+    {label:"Ortalama Aylık Net", value:fmtMoney(ortalamaAylikNet), cls:""},
+    {label:"En Yüksek Net Ay", value: aylikNet[enYuksekAyIndex]!==0 ? `${AY_ISIMLERI[enYuksekAyIndex]} (${fmtMoney(aylikNet[enYuksekAyIndex])})` : '-', cls:""},
+    {label:"Tüm Zamanlar Net Kazanç", value:fmtMoney(tumZamanlarNet), cls:tumZamanlarNet<0?"warn":"ok"}
   ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
 
   if(typeof Chart === 'undefined'){
@@ -842,16 +1028,21 @@ function renderAnaliz(){
   }
   const renk = analizGrafikRenkleri().cizgi;
   const gizli = tutarlarGizli;
+  const renkGider = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim() || '#C0524A';
 
   const ctxAylik = document.getElementById('grafik-aylik').getContext('2d');
   if(grafikAylikInstance) grafikAylikInstance.destroy();
   grafikAylikInstance = new Chart(ctxAylik, {
     type: 'bar',
-    data: { labels: AY_ISIMLERI, datasets: [{ label: `${seciliYil||''} Kazanç`, data: aylikToplamlar, backgroundColor: renk, borderRadius: 5 }] },
+    data: { labels: AY_ISIMLERI, datasets: [
+      { label: 'Ücret', data: aylikUcret, backgroundColor: renk, borderRadius: 5 },
+      { label: 'Gider', data: aylikGider, backgroundColor: renkGider, borderRadius: 5 },
+      { label: 'Net', data: aylikNet, backgroundColor: '#5B7A6F', borderRadius: 5 }
+    ] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx)=> gizli ? '••••••' : fmtMoney(ctx.parsed.y) } } },
-      scales: { y: { beginAtZero:true, ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
+      plugins: { legend: { display:true, position:'bottom', labels:{boxWidth:12,font:{size:11}} }, tooltip: { callbacks: { label: (ctx)=> gizli ? `${ctx.dataset.label}: ••••••` : `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
     }
   });
 
@@ -860,11 +1051,15 @@ function renderAnaliz(){
   const yillarSirali = [...yillar].sort();
   grafikYillikInstance = new Chart(ctxYillik, {
     type: 'bar',
-    data: { labels: yillarSirali, datasets: [{ label: 'Yıllık Kazanç', data: yillarSirali.map(y=>yilToplamlari[y]), backgroundColor: renk, borderRadius: 5 }] },
+    data: { labels: yillarSirali, datasets: [
+      { label: 'Ücret', data: yillarSirali.map(y=>yilUcretToplamlari[y]), backgroundColor: renk, borderRadius: 5 },
+      { label: 'Gider', data: yillarSirali.map(y=>yilGiderToplamlari[y]), backgroundColor: renkGider, borderRadius: 5 },
+      { label: 'Net', data: yillarSirali.map(y=>yilUcretToplamlari[y]-yilGiderToplamlari[y]), backgroundColor: '#5B7A6F', borderRadius: 5 }
+    ] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx)=> gizli ? '••••••' : fmtMoney(ctx.parsed.y) } } },
-      scales: { y: { beginAtZero:true, ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
+      plugins: { legend: { display:true, position:'bottom', labels:{boxWidth:12,font:{size:11}} }, tooltip: { callbacks: { label: (ctx)=> gizli ? `${ctx.dataset.label}: ••••••` : `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
     }
   });
 }
@@ -882,26 +1077,24 @@ function openHareketDetayModal(mukellef){
     h.aciklama.toLowerCase().includes(q)
   );
 
-  // Bakiye, sadece o an listelenen (filtrelenmiş) hareketlere göre kendi içinde tutarlı hesaplanır.
-  const kronolojikSirali = [...hareketlerFiltreli].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
-  const bakiyeMapFiltre = {};
-  let running = 0;
-  kronolojikSirali.forEach(h=>{ running += (h.tur==='Borç' ? Number(h.tutar) : -Number(h.tutar)); bakiyeMapFiltre[h.id] = running; });
+  // Bakiye, mükellefin TÜM geçmişine göre (gerçek kalan bakiye) hesaplanır — filtre sadece hangi satırların listeleneceğini daraltır.
+  const bakiyeMapTum = cariBakiyeMap();
 
   const toplamBorc = hareketlerFiltreli.filter(h=>h.tur==='Borç').reduce((s,h)=>s+Number(h.tutar),0);
   const toplamAlacak = hareketlerFiltreli.filter(h=>h.tur==='Alacak').reduce((s,h)=>s+Number(h.tutar),0);
-  const guncelBakiye = toplamBorc - toplamAlacak;
 
   const hareketler = [...hareketlerFiltreli].sort((a,b)=> b.tarih===a.tarih ? b.id-a.id : b.tarih.localeCompare(a.tarih));
+  const enSonHareket = hareketlerTumu.length ? [...hareketlerTumu].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih)).slice(-1)[0] : null;
+  const kalanBakiye = hareketler.length ? bakiyeMapTum[hareketler[0].id] : (enSonHareket ? bakiyeMapTum[enSonHareket.id] : 0);
 
   renderModal(`
     <h3>${esc(mukellef)}</h3>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin:-8px 0 6px;font-size:12.5px;color:var(--ink-soft);">
-      <span>Toplam Borç: <strong style="color:var(--ink);">${fmtMoney(toplamBorc)}</strong></span>
-      <span>Toplam Alacak: <strong style="color:var(--ink);">${fmtMoney(toplamAlacak)}</strong></span>
-      <span>Bakiye: <strong style="color:${guncelBakiye>0?'var(--danger)':guncelBakiye<0?'var(--accent)':'inherit'}">${fmtMoney(guncelBakiye)}</strong></span>
+      <span>${filtreAktif?'Dönem ':''}Toplam Borç: <strong style="color:var(--ink);">${fmtMoney(toplamBorc)}</strong></span>
+      <span>${filtreAktif?'Dönem ':''}Toplam Alacak: <strong style="color:var(--ink);">${fmtMoney(toplamAlacak)}</strong></span>
+      <span>Kalan Bakiye: <strong style="color:${kalanBakiye>0?'var(--danger)':kalanBakiye<0?'var(--accent)':'inherit'}">${fmtMoney(kalanBakiye)}</strong></span>
     </div>
-    ${filtreAktif ? `<p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 10px;">🔍 Filtre uygulanıyor — ${hareketlerFiltreli.length}/${hareketlerTumu.length} hareket gösteriliyor. Toplamlar ve bakiye sadece gösterilen hareketlere göredir.</p>` : `<div style="margin-bottom:14px;"></div>`}
+    ${filtreAktif ? `<p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 10px;">🔍 Filtre uygulanıyor — ${hareketlerFiltreli.length}/${hareketlerTumu.length} hareket gösteriliyor. Toplamlar seçili döneme, bakiye ise mükellefin tüm geçmişine göredir.</p>` : `<div style="margin-bottom:14px;"></div>`}
     <div class="table-scroll" style="max-height:min(46vh,340px);overflow-y:auto;">
     <table>
       <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tür</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
@@ -912,7 +1105,7 @@ function openHareketDetayModal(mukellef){
             <td data-label="Açıklama">${esc(h.aciklama)}</td>
             <td data-label="Tür"><span style="font-weight:600;color:${h.tur==='Borç'?'var(--danger)':'var(--accent)'}">${h.tur}</span></td>
             <td data-label="Tutar">${fmtMoney(h.tutar)}</td>
-            <td data-label="Bakiye"><strong style="color:${bakiyeMapFiltre[h.id]>0?'var(--danger)':bakiyeMapFiltre[h.id]<0?'var(--accent)':'inherit'}">${fmtMoney(bakiyeMapFiltre[h.id])}</strong></td>
+            <td data-label="Bakiye"><strong style="color:${bakiyeMapTum[h.id]>0?'var(--danger)':bakiyeMapTum[h.id]<0?'var(--accent)':'inherit'}">${fmtMoney(bakiyeMapTum[h.id])}</strong></td>
             <td class="cell-actions"><div class="row-actions">
               <button class="icon-btn" onclick="openCariHesapModal(${h.id})">✎</button>
               <button class="icon-btn del" onclick="deleteCariHesap(${h.id})">🗑</button>
@@ -1261,11 +1454,14 @@ function yilSonuDevriYap(){
     if(varMi){ atlananVarOlan++; return; }
     const bakiye = DB.cariHesap
       .filter(h=>h.mukellef===m && h.tarih<=`${yil}-12-31`)
-      .reduce((s,h)=> s + (h.tur==='Borç'? Number(h.tutar) : -Number(h.tutar)), 0);
+      .reduce((s,h)=> {
+        const devirMi = h.kaynak==='devir' || /Yılından Devir$/.test(h.aciklama||'');
+        return devirMi ? s : s + (h.tur==='Borç'? Number(h.tutar) : -Number(h.tutar));
+      }, 0);
     if(Math.abs(bakiye) < 0.005){ atlananSifir++; return; }
     DB.cariHesap.push({
       id: uid(DB.cariHesap), mukellef: m, tarih: devirTarihi, aciklama: devirAciklama,
-      tur: bakiye>0 ? 'Borç' : 'Alacak', tutar: Math.abs(bakiye)
+      tur: bakiye>0 ? 'Borç' : 'Alacak', tutar: Math.abs(bakiye), kaynak: 'devir'
     });
     olusturulan++;
   });
@@ -1305,6 +1501,38 @@ function tumHareketleriTemizle(){
   renderCariHesap();
   kaydet();
   document.getElementById('status-msg').textContent = `${adet} hareket kaydının tamamı silindi`;
+}
+function openKasaTemizleModal(){
+  const adet = (DB.kasaHareket||[]).length;
+  const tahsilatSayisi = (DB.kasaHareket||[]).filter(k=>k.kaynak==='tahsilat').length;
+  renderModal(`
+    <h3>🗑️ Kasayı Temizle</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">
+      Bu işlem <strong>tüm kasa hareketlerini (${adet} kayıt)</strong> kalıcı olarak siler — giderler, manuel girişler ve devir kayıtları dahil.
+      ${tahsilatSayisi ? `Cari hesaptan otomatik gelen <strong>${tahsilatSayisi} tahsilat kaydı</strong> da kasadan silinir, ancak ilgili mükelleflerin cari hesabındaki tahsilat kayıtları etkilenmez, orada olduğu gibi kalır.` : ''}
+      <strong style="color:var(--danger);">Bu işlem geri alınamaz.</strong>
+    </p>
+    <div class="field"><label>Onaylamak için kutuya <strong>SİL</strong> yazın</label>
+      <input id="f-kasaTemizleOnay" placeholder="SİL" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" style="background:var(--danger);border-color:var(--danger);" onclick="kasaTemizle()">Kasayı Sil</button>
+    </div>
+  `);
+}
+function kasaTemizle(){
+  const onay = val('f-kasaTemizleOnay');
+  if(onay !== 'SİL' && onay !== 'sil'){ alert('Onaylamak için kutuya tam olarak "SİL" yazmanız gerekiyor.'); return; }
+  const adet = (DB.kasaHareket||[]).length;
+  if(!adet){ alert('Zaten hiç kasa hareketi yok.'); closeModal(); return; }
+  if(!confirm(`${adet} adet kasa hareketinin TAMAMI silinecek. Cari hesaptaki mükellef kayıtları etkilenmeyecek. Kesinlikle emin misiniz?`)) return;
+
+  DB.kasaHareket = [];
+  closeModal();
+  renderKasa();
+  kaydet();
+  document.getElementById('status-msg').textContent = `${adet} kasa hareketinin tamamı silindi`;
 }
 function openFirmaTemizleModal(){
   const mukellefler = mukellefListesiCikar();
@@ -1382,12 +1610,20 @@ async function cariHesapRaporuOlustur(mukellefParam){
   if(!f){ alert('Lütfen önce yukarıdaki filtreden bir mükellef seçin, ardından raporu oluşturun.'); return; }
   const gizliDurum = tutarlarGizli;
   tutarlarGizli = false;
+  const yilF = document.getElementById('cari-yil-filter')?.value || '';
+  const ayF = document.getElementById('cari-ay-filter')?.value || '';
   const bakiyeMap = cariBakiyeMap();
-  const hareketler = DB.cariHesap.filter(h=>h.mukellef===f).sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
-  if(!hareketler.length){ tutarlarGizli = gizliDurum; alert('Bu mükellef için hareket kaydı bulunamadı.'); return; }
+  const tumHareketler = DB.cariHesap.filter(h=>h.mukellef===f).sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
+  const hareketler = tumHareketler.filter(h=>
+    (!yilF || h.tarih.slice(0,4)===yilF) &&
+    (!ayF || h.tarih.slice(5,7)===ayF)
+  );
+  if(!hareketler.length){ tutarlarGizli = gizliDurum; alert('Bu dönem için hareket kaydı bulunamadı.'); return; }
+  const AY_ADLARI_RAPOR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const donemEtiketi = yilF ? (ayF ? `${AY_ADLARI_RAPOR[Number(ayF)-1]} ${yilF}` : `${yilF} Yılı`) : 'Tüm Zamanlar';
   const toplamBorc = hareketler.filter(h=>h.tur==='Borç').reduce((s,h)=>s+Number(h.tutar),0);
   const toplamAlacakTutari = hareketler.filter(h=>h.tur==='Alacak').reduce((s,h)=>s+Number(h.tutar),0);
-  const sonBakiye = toplamBorc - toplamAlacakTutari;
+  const sonBakiye = bakiyeMap[hareketler[hareketler.length-1].id];
   const bugun = new Date().toLocaleDateString('tr-TR', {day:'2-digit', month:'long', year:'numeric'});
 
   const satirlar = hareketler.map(h=>`
@@ -1402,7 +1638,7 @@ async function cariHesapRaporuOlustur(mukellefParam){
   const icHtml = `
     <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
       <h1 style="font-size:20px;margin:0 0 4px;">Cari Hesap Hareket Raporu</h1>
-      <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;"><strong>${esc(f)}</strong><br>Rapor Tarihi: ${bugun}</div>
+      <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;"><strong>${esc(f)}</strong> — Dönem: <strong>${donemEtiketi}</strong><br>Rapor Tarihi: ${bugun}</div>
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead><tr>
           <th style="background:#F3F1EB;text-align:left;padding:8px 10px;border-bottom:2px solid #1B2430;">Tarih</th>
@@ -1414,9 +1650,9 @@ async function cariHesapRaporuOlustur(mukellefParam){
         <tbody>${satirlar.replace(/<td>/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;">').replace(/<td style="text-align:(center|right)([^"]*)">/g,'<td style="padding:7px 10px;border-bottom:1px solid #E3E0D6;text-align:$1$2">')}</tbody>
       </table>
       <div style="margin-top:22px;width:300px;margin-left:auto;font-size:13px;">
-        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Borç</span><span>${fmtMoney(toplamBorc)}</span></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Toplam Alacak</span><span>${fmtMoney(toplamAlacakTutari)}</span></div>
-        <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;font-size:14.5px;font-weight:700;border-top:2px solid #1B2430;"><span>Güncel Bakiye</span><span>${fmtMoney(sonBakiye)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>${yilF?'Dönem ':''}Toplam Borç</span><span>${fmtMoney(toplamBorc)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>${yilF?'Dönem ':''}Toplam Alacak</span><span>${fmtMoney(toplamAlacakTutari)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;font-size:14.5px;font-weight:700;border-top:2px solid #1B2430;"><span>Kalan Bakiye</span><span>${fmtMoney(sonBakiye)}</span></div>
       </div>
       <div style="margin-top:44px;font-size:11px;color:#9FADB8;">Bu rapor Cari Hesap Takip tarafından ${bugun} tarihinde otomatik oluşturulmuştur.</div>
     </div>`;
@@ -1430,14 +1666,19 @@ async function cariHesapRaporuOlustur(mukellefParam){
 /* ------------ Tüm Mükellefler — Borçlu/Alacaklı Raporu (PDF) ------------ */
 function cariOzetFiltreli(aciklamaFiltre){
   const q = (aciklamaFiltre||'').trim().toLowerCase();
+  const bakiyeMap = cariBakiyeMap();
+  const devirMi = (h)=> h.kaynak==='devir' || /Yılından Devir$/.test(h.aciklama||'');
   const kaynakHareketler = q ? DB.cariHesap.filter(h=>h.aciklama.toLowerCase().includes(q)) : DB.cariHesap;
-  const gruplar = {};
+  const gruplar = {}; const sonHareket = {};
   kaynakHareketler.forEach(h=>{
     if(!gruplar[h.mukellef]) gruplar[h.mukellef] = {mukellef:h.mukellef, toplamBorc:0, toplamAlacak:0};
-    if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
-    else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+    if(!devirMi(h)){
+      if(h.tur==='Borç') gruplar[h.mukellef].toplamBorc += Number(h.tutar);
+      else gruplar[h.mukellef].toplamAlacak += Number(h.tutar);
+    }
+    if(!sonHareket[h.mukellef] || h.tarih > sonHareket[h.mukellef].tarih || (h.tarih===sonHareket[h.mukellef].tarih && h.id > sonHareket[h.mukellef].id)) sonHareket[h.mukellef] = h;
   });
-  return Object.values(gruplar).map(g=>({...g, bakiye: g.toplamBorc - g.toplamAlacak}));
+  return Object.values(gruplar).map(g=>({...g, bakiye: bakiyeMap[sonHareket[g.mukellef].id]}));
 }
 function tumMukelleflerRaporuModal(){
   renderModal(`
