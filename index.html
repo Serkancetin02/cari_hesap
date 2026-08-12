@@ -34,6 +34,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#F3F1EB; --panel:#FFFFFF; --ink:#1B2430; --ink-soft:#5B6672;
@@ -235,6 +236,7 @@
 <div class="page-tabs">
   <button class="tab-btn active" id="tab-btn-cari" onclick="sayfaGoster('cari')">💰 Cari Hesap</button>
   <button class="tab-btn" id="tab-btn-kasa" onclick="sayfaGoster('kasa')">🏦 Kasa</button>
+  <button class="tab-btn" id="tab-btn-analiz" onclick="sayfaGoster('analiz')">📊 Analiz</button>
 </div>
 
 <div id="sayfa-cari">
@@ -321,6 +323,31 @@
       <tbody id="tbl-kasa"></tbody>
     </table>
     </div>
+  </div>
+  </div>
+</div>
+</div>
+
+<div id="sayfa-analiz" style="display:none;">
+<div class="layout">
+  <div class="main" style="width:100%;">
+  <h1 class="page-title">Analiz</h1>
+  <p class="page-sub">Mükelleflere kestiğin ücretlere (cari hesaptaki Borç kayıtları) göre aylık/yıllık kazanç analizi — tahsil edilip edilmediğine bakılmaksızın.</p>
+
+  <div class="cards" id="analiz-ozet-cards"></div>
+
+  <div class="toolbar">
+    <select class="filter" id="analiz-yil-secim" onchange="renderAnaliz()"></select>
+  </div>
+
+  <div class="panel">
+    <h3>Aylık Kazanç (Seçili Yıl)</h3>
+    <div style="position:relative;height:280px;"><canvas id="grafik-aylik"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h3>Yıllık Kazanç (Tüm Yıllar)</h3>
+    <div style="position:relative;height:280px;"><canvas id="grafik-yillik"></canvas></div>
   </div>
   </div>
 </div>
@@ -428,6 +455,7 @@ function tutarGizleAcKapat(){
   localStorage.setItem('cariHesapTutarGizli', tutarlarGizli ? '1' : '0');
   document.getElementById('tutar-gizle-btn').textContent = tutarlarGizli ? '🙈' : '👁️';
   renderCariHesap();
+  if(document.getElementById('sayfa-analiz').style.display !== 'none') renderAnaliz();
 }
 function esc(str){ const d=document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
 function val(id){ return document.getElementById(id).value.trim(); }
@@ -654,12 +682,16 @@ function renderCariHesap(){
 function sayfaGoster(sayfa){
   document.getElementById('sayfa-cari').style.display = sayfa==='cari' ? '' : 'none';
   document.getElementById('sayfa-kasa').style.display = sayfa==='kasa' ? '' : 'none';
+  document.getElementById('sayfa-analiz').style.display = sayfa==='analiz' ? '' : 'none';
   document.getElementById('tab-btn-cari').classList.toggle('active', sayfa==='cari');
   document.getElementById('tab-btn-kasa').classList.toggle('active', sayfa==='kasa');
+  document.getElementById('tab-btn-analiz').classList.toggle('active', sayfa==='analiz');
   const fab = document.getElementById('fab-btn');
-  if(sayfa==='kasa'){ fab.setAttribute('onclick',"openKasaHareketModal(null,'Gider')"); fab.title = 'Gider Ekle'; }
-  else { fab.setAttribute('onclick','openCariHesapModal()'); fab.title = 'Yeni Hareket'; }
+  if(sayfa==='kasa'){ fab.setAttribute('onclick',"openKasaHareketModal(null,'Gider')"); fab.title = 'Gider Ekle'; fab.style.display=''; }
+  else if(sayfa==='analiz'){ fab.style.display='none'; }
+  else { fab.setAttribute('onclick','openCariHesapModal()'); fab.title = 'Yeni Hareket'; fab.style.display=''; }
   if(sayfa==='kasa') renderKasa();
+  if(sayfa==='analiz') renderAnaliz();
 }
 function kasaBakiyeMap(){
   const liste = [...(DB.kasaHareket||[])].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
@@ -764,6 +796,77 @@ function exportKasaExcel(){
   XLSX.utils.book_append_sheet(wb, ws, "Kasa");
   XLSX.writeFile(wb, "kasa-" + new Date().toISOString().slice(0,10) + ".xlsx");
   document.getElementById('status-msg').textContent = 'Kasa Excel olarak dışa aktarıldı';
+}
+
+/* ============================================================
+   ANALİZ — kestiğim ücretlere (Borç kayıtları) göre aylık/yıllık kazanç
+   ============================================================ */
+let grafikAylikInstance = null, grafikYillikInstance = null;
+const AY_ISIMLERI = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+function analizGrafikRenkleri(){
+  return { cizgi: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2F7D82' };
+}
+function renderAnaliz(){
+  const ucretler = DB.cariHesap.filter(h=>h.tur==='Borç');
+  const yilSel = document.getElementById('analiz-yil-secim');
+  const yillar = [...new Set(ucretler.map(h=>h.tarih.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  const mevcutSecim = yilSel.value;
+  yilSel.innerHTML = yillar.length ? yillar.map(y=>`<option ${mevcutSecim===y?'selected':(!mevcutSecim && y===yillar[0]?'selected':'')}>${y}</option>`).join('') : '<option value="">Kayıt yok</option>';
+  const seciliYil = yilSel.value;
+
+  const yilToplamlari = {};
+  yillar.forEach(y=>{ yilToplamlari[y] = ucretler.filter(h=>h.tarih.slice(0,4)===y).reduce((s,h)=>s+Number(h.tutar),0); });
+
+  const aylikToplamlar = new Array(12).fill(0);
+  ucretler.filter(h=>h.tarih.slice(0,4)===seciliYil).forEach(h=>{
+    const ayIndex = Number(h.tarih.slice(5,7)) - 1;
+    if(ayIndex>=0 && ayIndex<12) aylikToplamlar[ayIndex] += Number(h.tutar);
+  });
+
+  const seciliYilToplami = yilToplamlari[seciliYil] || 0;
+  const doluAySayisi = aylikToplamlar.filter(v=>v>0).length || 1;
+  const ortalamaAylik = seciliYilToplami / doluAySayisi;
+  const enYuksekAyIndex = aylikToplamlar.indexOf(Math.max(...aylikToplamlar));
+  const tumZamanlarToplami = ucretler.reduce((s,h)=>s+Number(h.tutar),0);
+
+  document.getElementById('analiz-ozet-cards').innerHTML = [
+    {label:`${seciliYil||'-'} Toplamı`, value:fmtMoney(seciliYilToplami), cls:""},
+    {label:`${seciliYil||'-'} Ortalama Aylık`, value:fmtMoney(ortalamaAylik), cls:""},
+    {label:"En Yüksek Ay", value: aylikToplamlar[enYuksekAyIndex]>0 ? `${AY_ISIMLERI[enYuksekAyIndex]} (${fmtMoney(aylikToplamlar[enYuksekAyIndex])})` : '-', cls:""},
+    {label:"Tüm Zamanlar Toplamı", value:fmtMoney(tumZamanlarToplami), cls:""}
+  ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
+
+  if(typeof Chart === 'undefined'){
+    document.getElementById('status-msg').textContent = '⚠️ Grafik kütüphanesi yüklenemedi (internet bağlantınızı kontrol edin)';
+    return;
+  }
+  const renk = analizGrafikRenkleri().cizgi;
+  const gizli = tutarlarGizli;
+
+  const ctxAylik = document.getElementById('grafik-aylik').getContext('2d');
+  if(grafikAylikInstance) grafikAylikInstance.destroy();
+  grafikAylikInstance = new Chart(ctxAylik, {
+    type: 'bar',
+    data: { labels: AY_ISIMLERI, datasets: [{ label: `${seciliYil||''} Kazanç`, data: aylikToplamlar, backgroundColor: renk, borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx)=> gizli ? '••••••' : fmtMoney(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero:true, ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
+    }
+  });
+
+  const ctxYillik = document.getElementById('grafik-yillik').getContext('2d');
+  if(grafikYillikInstance) grafikYillikInstance.destroy();
+  const yillarSirali = [...yillar].sort();
+  grafikYillikInstance = new Chart(ctxYillik, {
+    type: 'bar',
+    data: { labels: yillarSirali, datasets: [{ label: 'Yıllık Kazanç', data: yillarSirali.map(y=>yilToplamlari[y]), backgroundColor: renk, borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx)=> gizli ? '••••••' : fmtMoney(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero:true, ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
+    }
+  });
 }
 function openHareketDetayModal(mukellef){
   aktifModalMukellef = mukellef;
