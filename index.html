@@ -34,7 +34,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#F3F1EB; --panel:#FFFFFF; --ink:#1B2430; --ink-soft:#5B6672;
@@ -218,12 +217,17 @@
 <div class="login-overlay" id="login-overlay">
   <div class="login-box">
     <h2>🔒 Cari Hesap</h2>
-    <p>Verilerin bulutla senkronize olması için giriş yap.</p>
-    <div class="login-error" id="login-error"></div>
-    <input type="email" id="login-email" placeholder="E-posta" autocomplete="username">
-    <input type="password" id="login-pass" placeholder="Şifre" autocomplete="current-password">
-    <button onclick="girisYap()">Giriş Yap</button>
-    <div class="login-status" id="login-status"></div>
+    <div id="login-otomatik-durum">
+      <p>Bağlanıyor…</p>
+    </div>
+    <div id="login-manuel-form" style="display:none;">
+      <p>Verilerin bulutla senkronize olması için giriş yap.</p>
+      <div class="login-error" id="login-error"></div>
+      <input type="email" id="login-email" placeholder="E-posta" autocomplete="username">
+      <input type="password" id="login-pass" placeholder="Şifre" autocomplete="current-password">
+      <button onclick="girisYap()">Giriş Yap</button>
+      <div class="login-status" id="login-status"></div>
+    </div>
   </div>
 </div>
 
@@ -236,7 +240,6 @@
 <div class="page-tabs">
   <button class="tab-btn active" id="tab-btn-cari" onclick="sayfaGoster('cari')">💰 Cari Hesap</button>
   <button class="tab-btn" id="tab-btn-kasa" onclick="sayfaGoster('kasa')">🏦 Kasa</button>
-  <button class="tab-btn" id="tab-btn-analiz" onclick="sayfaGoster('analiz')">📊 Analiz</button>
 </div>
 
 <div id="sayfa-cari">
@@ -336,31 +339,6 @@
       <tbody id="tbl-kasa"></tbody>
     </table>
     </div>
-  </div>
-  </div>
-</div>
-</div>
-
-<div id="sayfa-analiz" style="display:none;">
-<div class="layout">
-  <div class="main" style="width:100%;">
-  <h1 class="page-title">Analiz</h1>
-  <p class="page-sub">Mükelleflere kestiğin ücretlerden (cari hesaptaki Borç kayıtları) kasadaki giderlerin düşülmesiyle hesaplanan net kazanç analizi — tahsil edilip edilmediğine bakılmaksızın.</p>
-
-  <div class="cards" id="analiz-ozet-cards"></div>
-
-  <div class="toolbar">
-    <select class="filter" id="analiz-yil-secim" onchange="renderAnaliz()"></select>
-  </div>
-
-  <div class="panel">
-    <h3>Aylık Kazanç (Seçili Yıl)</h3>
-    <div style="position:relative;height:280px;"><canvas id="grafik-aylik"></canvas></div>
-  </div>
-
-  <div class="panel">
-    <h3>Yıllık Kazanç (Tüm Yıllar)</h3>
-    <div style="position:relative;height:280px;"><canvas id="grafik-yillik"></canvas></div>
   </div>
   </div>
 </div>
@@ -468,10 +446,18 @@ function tutarGizleAcKapat(){
   localStorage.setItem('cariHesapTutarGizli', tutarlarGizli ? '1' : '0');
   document.getElementById('tutar-gizle-btn').textContent = tutarlarGizli ? '🙈' : '👁️';
   renderCariHesap();
-  if(document.getElementById('sayfa-analiz').style.display !== 'none') renderAnaliz();
 }
 function esc(str){ const d=document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
 function val(id){ return document.getElementById(id).value.trim(); }
+/* ------------ Daha önce yazılmış açıklamaları hatırla (öneri listesi) ------------ */
+function aciklamaGecmisiOptions(){
+  const hepsi = [
+    ...(DB.cariHesap||[]).map(h=>h.aciklama),
+    ...(DB.kasaHareket||[]).map(k=>k.aciklama)
+  ].filter(Boolean);
+  const benzersiz = [...new Set(hepsi)].sort((a,b)=>a.localeCompare(b,'tr'));
+  return benzersiz.map(a=>`<option value="${esc(a)}">`).join('');
+}
 
 function tickClock(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString('tr-TR'); }
 
@@ -705,16 +691,12 @@ function renderCariHesap(){
 function sayfaGoster(sayfa){
   document.getElementById('sayfa-cari').style.display = sayfa==='cari' ? '' : 'none';
   document.getElementById('sayfa-kasa').style.display = sayfa==='kasa' ? '' : 'none';
-  document.getElementById('sayfa-analiz').style.display = sayfa==='analiz' ? '' : 'none';
   document.getElementById('tab-btn-cari').classList.toggle('active', sayfa==='cari');
   document.getElementById('tab-btn-kasa').classList.toggle('active', sayfa==='kasa');
-  document.getElementById('tab-btn-analiz').classList.toggle('active', sayfa==='analiz');
   const fab = document.getElementById('fab-btn');
   if(sayfa==='kasa'){ fab.setAttribute('onclick',"openKasaHareketModal(null,'Gider')"); fab.title = 'Gider Ekle'; fab.style.display=''; }
-  else if(sayfa==='analiz'){ fab.style.display='none'; }
   else { fab.setAttribute('onclick','openCariHesapModal()'); fab.title = 'Yeni Hareket'; fab.style.display=''; }
   if(sayfa==='kasa') renderKasa();
-  if(sayfa==='analiz') renderAnaliz();
 }
 function kasaBakiyeMap(){
   const liste = [...(DB.kasaHareket||[])].sort((a,b)=> a.tarih===b.tarih ? a.id-b.id : a.tarih.localeCompare(b.tarih));
@@ -793,7 +775,9 @@ function openKasaHareketModal(id, turOnerilen){
   renderModal(`
     <h3>${item ? 'Kasa Hareketini Düzenle' : (turOnerilen==='Gider' ? '➖ Gider Ekle' : '➕ Giriş Ekle')}</h3>
     <div class="field"><label>Tarih</label><input id="f-kasaTarih" type="date" value="${item?item.tarih:varsayilanTarih}"></div>
-    <div class="field"><label>Açıklama</label><input id="f-kasaAciklama" value="${item?esc(item.aciklama):''}" placeholder="Örn. Ofis kirası, kırtasiye, elektrik faturası"></div>
+    <div class="field"><label>Açıklama</label><input id="f-kasaAciklama" list="aciklama-datalist" value="${item?esc(item.aciklama):''}" placeholder="Örn. Ofis kirası, kırtasiye, elektrik faturası">
+      <datalist id="aciklama-datalist">${aciklamaGecmisiOptions()}</datalist>
+    </div>
     <div class="field"><label>Tür</label>
       <select id="f-kasaTur">
         <option value="Gider" ${(item?item.tur:turOnerilen)==='Gider'?'selected':''}>Gider</option>
@@ -969,100 +953,6 @@ function kasaAySonuDevriYap(){
   document.getElementById('status-msg').textContent = `${devirAciklama} oluşturuldu (${fmtMoney(sonBakiye)})`;
 }
 
-/* ============================================================
-   ANALİZ — kestiğim ücretlere (Borç kayıtları) göre aylık/yıllık kazanç
-   ============================================================ */
-let grafikAylikInstance = null, grafikYillikInstance = null;
-const AY_ISIMLERI = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-function analizGrafikRenkleri(){
-  return { cizgi: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2F7D82' };
-}
-function renderAnaliz(){
-  const ucretler = DB.cariHesap.filter(h=>h.tur==='Borç');
-  const giderler = (DB.kasaHareket||[]).filter(k=>k.tur==='Gider' && k.kaynak!=='devir');
-  const yilSel = document.getElementById('analiz-yil-secim');
-  const yillar = [...new Set([...ucretler.map(h=>h.tarih.slice(0,4)), ...giderler.map(k=>k.tarih.slice(0,4))])].sort((a,b)=>b.localeCompare(a));
-  const mevcutSecim = yilSel.value;
-  yilSel.innerHTML = yillar.length ? yillar.map(y=>`<option ${mevcutSecim===y?'selected':(!mevcutSecim && y===yillar[0]?'selected':'')}>${y}</option>`).join('') : '<option value="">Kayıt yok</option>';
-  const seciliYil = yilSel.value;
-
-  const yilUcretToplamlari = {}, yilGiderToplamlari = {};
-  yillar.forEach(y=>{
-    yilUcretToplamlari[y] = ucretler.filter(h=>h.tarih.slice(0,4)===y).reduce((s,h)=>s+Number(h.tutar),0);
-    yilGiderToplamlari[y] = giderler.filter(k=>k.tarih.slice(0,4)===y).reduce((s,k)=>s+Number(k.tutar),0);
-  });
-
-  const aylikUcret = new Array(12).fill(0), aylikGider = new Array(12).fill(0);
-  ucretler.filter(h=>h.tarih.slice(0,4)===seciliYil).forEach(h=>{
-    const ayIndex = Number(h.tarih.slice(5,7)) - 1;
-    if(ayIndex>=0 && ayIndex<12) aylikUcret[ayIndex] += Number(h.tutar);
-  });
-  giderler.filter(k=>k.tarih.slice(0,4)===seciliYil).forEach(k=>{
-    const ayIndex = Number(k.tarih.slice(5,7)) - 1;
-    if(ayIndex>=0 && ayIndex<12) aylikGider[ayIndex] += Number(k.tutar);
-  });
-  const aylikNet = aylikUcret.map((v,i)=>v - aylikGider[i]);
-
-  const seciliYilUcret = yilUcretToplamlari[seciliYil] || 0;
-  const seciliYilGider = yilGiderToplamlari[seciliYil] || 0;
-  const seciliYilNet = seciliYilUcret - seciliYilGider;
-  const doluAySayisi = aylikNet.filter(v=>v!==0).length || 1;
-  const ortalamaAylikNet = seciliYilNet / doluAySayisi;
-  const enYuksekAyIndex = aylikNet.indexOf(Math.max(...aylikNet));
-  const tumZamanlarUcret = ucretler.reduce((s,h)=>s+Number(h.tutar),0);
-  const tumZamanlarGider = giderler.reduce((s,k)=>s+Number(k.tutar),0);
-  const tumZamanlarNet = tumZamanlarUcret - tumZamanlarGider;
-
-  document.getElementById('analiz-ozet-cards').innerHTML = [
-    {label:`${seciliYil||'-'} Ücret Toplamı`, value:fmtMoney(seciliYilUcret), cls:""},
-    {label:`${seciliYil||'-'} Gider Toplamı`, value:fmtMoney(seciliYilGider), cls:""},
-    {label:`${seciliYil||'-'} Net Kazanç`, value:fmtMoney(seciliYilNet), cls:seciliYilNet<0?"warn":"ok"},
-    {label:"Ortalama Aylık Net", value:fmtMoney(ortalamaAylikNet), cls:""},
-    {label:"En Yüksek Net Ay", value: aylikNet[enYuksekAyIndex]!==0 ? `${AY_ISIMLERI[enYuksekAyIndex]} (${fmtMoney(aylikNet[enYuksekAyIndex])})` : '-', cls:""},
-    {label:"Tüm Zamanlar Net Kazanç", value:fmtMoney(tumZamanlarNet), cls:tumZamanlarNet<0?"warn":"ok"}
-  ].map(c=>`<div class="card"><div class="label">${c.label}</div><div class="value ${c.cls}">${c.value}</div></div>`).join('');
-
-  if(typeof Chart === 'undefined'){
-    document.getElementById('status-msg').textContent = '⚠️ Grafik kütüphanesi yüklenemedi (internet bağlantınızı kontrol edin)';
-    return;
-  }
-  const renk = analizGrafikRenkleri().cizgi;
-  const gizli = tutarlarGizli;
-  const renkGider = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim() || '#C0524A';
-
-  const ctxAylik = document.getElementById('grafik-aylik').getContext('2d');
-  if(grafikAylikInstance) grafikAylikInstance.destroy();
-  grafikAylikInstance = new Chart(ctxAylik, {
-    type: 'bar',
-    data: { labels: AY_ISIMLERI, datasets: [
-      { label: 'Ücret', data: aylikUcret, backgroundColor: renk, borderRadius: 5 },
-      { label: 'Gider', data: aylikGider, backgroundColor: renkGider, borderRadius: 5 },
-      { label: 'Net', data: aylikNet, backgroundColor: '#5B7A6F', borderRadius: 5 }
-    ] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display:true, position:'bottom', labels:{boxWidth:12,font:{size:11}} }, tooltip: { callbacks: { label: (ctx)=> gizli ? `${ctx.dataset.label}: ••••••` : `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}` } } },
-      scales: { y: { ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
-    }
-  });
-
-  const ctxYillik = document.getElementById('grafik-yillik').getContext('2d');
-  if(grafikYillikInstance) grafikYillikInstance.destroy();
-  const yillarSirali = [...yillar].sort();
-  grafikYillikInstance = new Chart(ctxYillik, {
-    type: 'bar',
-    data: { labels: yillarSirali, datasets: [
-      { label: 'Ücret', data: yillarSirali.map(y=>yilUcretToplamlari[y]), backgroundColor: renk, borderRadius: 5 },
-      { label: 'Gider', data: yillarSirali.map(y=>yilGiderToplamlari[y]), backgroundColor: renkGider, borderRadius: 5 },
-      { label: 'Net', data: yillarSirali.map(y=>yilUcretToplamlari[y]-yilGiderToplamlari[y]), backgroundColor: '#5B7A6F', borderRadius: 5 }
-    ] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display:true, position:'bottom', labels:{boxWidth:12,font:{size:11}} }, tooltip: { callbacks: { label: (ctx)=> gizli ? `${ctx.dataset.label}: ••••••` : `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}` } } },
-      scales: { y: { ticks: { callback: (v)=> gizli ? '••••' : fmtMoney(v) } } }
-    }
-  });
-}
 function openHareketDetayModal(mukellef){
   aktifModalMukellef = mukellef;
   const yilF = document.getElementById('cari-yil-filter')?.value || '';
@@ -1142,7 +1032,9 @@ function openCariHesapModal(id, onMukellef){
       </datalist>
     </div>
     <div class="field"><label>Tarih</label><input id="f-cariTarih" type="date" value="${item?item.tarih:addDays(0)}"></div>
-    <div class="field"><label>Açıklama</label><input id="f-cariAciklama" value="${item?esc(item.aciklama):''}" placeholder="Örn. Mart 2026 muhasebe hizmet bedeli"></div>
+    <div class="field"><label>Açıklama</label><input id="f-cariAciklama" list="aciklama-datalist" value="${item?esc(item.aciklama):''}" placeholder="Örn. Mart 2026 muhasebe hizmet bedeli">
+      <datalist id="aciklama-datalist">${aciklamaGecmisiOptions()}</datalist>
+    </div>
     <div class="field"><label>Tür</label>
       <select id="f-cariTur">
         <option value="Borç" ${item&&item.tur==='Borç'?'selected':''}>Borç (mükellefe fatura/hizmet bedeli)</option>
@@ -1172,32 +1064,11 @@ function saveCariHesap(id){
     data.id = kayitliId;
     DB.cariHesap.push(data);
   }
-  cariHesaptenKasaSenkronla(kayitliId, data);
   renderCariHesap();
   kaydet();
   document.getElementById('status-msg').textContent = 'Hareket kaydedildi';
   if(aktifModalMukellef) openHareketDetayModal(aktifModalMukellef);
   else closeModal();
-}
-
-/* ------------ Cari Hesap ↔ Kasa senkronu (tahsilatlar otomatik kasaya işlenir) ------------ */
-function cariHesaptenKasaSenkronla(cariId, data){
-  if(!Array.isArray(DB.kasaHareket)) DB.kasaHareket = [];
-  const mevcutKasa = DB.kasaHareket.find(k=>k.cariHesapId===cariId && k.kaynak==='tahsilat');
-  if(data.tur === 'Alacak'){
-    const aciklama = `Tahsilat - ${data.mukellef} (${data.aciklama})`;
-    if(mevcutKasa){
-      Object.assign(mevcutKasa, { tarih: data.tarih, aciklama, tutar: data.tutar });
-    } else {
-      DB.kasaHareket.push({ id: uid(DB.kasaHareket), tarih: data.tarih, aciklama, tur:'Giriş', tutar: data.tutar, kaynak:'tahsilat', cariHesapId: cariId });
-    }
-  } else if(mevcutKasa){
-    DB.kasaHareket = DB.kasaHareket.filter(k=>k.id!==mevcutKasa.id);
-  }
-}
-function cariHesaptenKasaSil(cariId){
-  if(!Array.isArray(DB.kasaHareket)) return;
-  DB.kasaHareket = DB.kasaHareket.filter(k=>!(k.cariHesapId===cariId && k.kaynak==='tahsilat'));
 }
 
 /* ------------ Toplu Ücret Ekleme (birden fazla mükellefe aynı anda) ------------ */
@@ -1221,7 +1092,9 @@ function openTopluUcretModal(){
       <textarea id="f-topluYeniMukellefler" placeholder="Listede olmayan mükellef varsa buraya, her satıra bir isim yazın" style="width:100%;min-height:60px;padding:9px 10px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13.5px;background:#FCFBF9;resize:vertical;"></textarea>
     </div>
     <div class="field"><label>Tarih</label><input id="f-topluTarih" type="date" value="${addDays(0)}"></div>
-    <div class="field"><label>Açıklama</label><input id="f-topluAciklama" placeholder="Örn. Temmuz 2026 muhasebe hizmet bedeli"></div>
+    <div class="field"><label>Açıklama</label><input id="f-topluAciklama" list="aciklama-datalist" placeholder="Örn. Temmuz 2026 muhasebe hizmet bedeli">
+      <datalist id="aciklama-datalist">${aciklamaGecmisiOptions()}</datalist>
+    </div>
     <div class="field"><label>Tür</label>
       <select id="f-topluTur">
         <option value="Borç">Borç (mükellefe fatura/hizmet bedeli)</option>
@@ -1258,7 +1131,6 @@ function saveTopluUcret(){
     const yeniId = uid(DB.cariHesap);
     const kayit = { id: yeniId, mukellef, tarih, aciklama, tur, tutar };
     DB.cariHesap.push(kayit);
-    cariHesaptenKasaSenkronla(yeniId, kayit);
   });
 
   closeModal();
@@ -1271,7 +1143,6 @@ function saveTopluUcret(){
 function deleteCariHesap(id){
   if(!confirm('Bu hareketi silmek istediğinize emin misiniz?')) return;
   DB.cariHesap = DB.cariHesap.filter(h=>h.id!==id);
-  cariHesaptenKasaSil(id);
   renderCariHesap();
   kaydet();
   document.getElementById('status-msg').textContent = 'Hareket silindi';
@@ -1339,7 +1210,6 @@ function importCariHesapExcel(event){
         const yeniId = uid(DB.cariHesap);
         const kayit = { id: yeniId, mukellef, tarih: parseTarihDegeri(row['Tarih']), aciklama, tur, tutar };
         DB.cariHesap.push(kayit);
-        cariHesaptenKasaSenkronla(yeniId, kayit);
         eklenen++;
       });
       renderCariHesap();
@@ -1403,7 +1273,6 @@ function importTekFirmaExcel(event){
         const yeniId = uid(DB.cariHesap);
         const kayit = { id: yeniId, mukellef, tarih: parseTarihDegeri(row['Tarih']), aciklama, tur, tutar };
         DB.cariHesap.push(kayit);
-        cariHesaptenKasaSenkronla(yeniId, kayit);
         eklenen++;
       });
       renderCariHesap();
@@ -1775,6 +1644,21 @@ const rtdb = firebase.database();
 let rtdbRef = null;
 let bulutHazir = false;
 let yerelDegisiklikBayragi = false;
+
+// Cihaz her açıldığında elle giriş yapmaya gerek kalmasın diye sabit bir hesapla otomatik bağlanılır.
+// Bu e-posta/şifreyi Firebase konsolunda Authentication → Users → Add user ile bir kez oluşturman yeterli.
+const OTOMATIK_GIRIS_EMAIL = 'serkan.cetin@cariotomasyon.local';
+const OTOMATIK_GIRIS_SIFRE = 'CariHesap2026#Otomasyon';
+
+function otomatikGirisDene(){
+  auth.signInWithEmailAndPassword(OTOMATIK_GIRIS_EMAIL, OTOMATIK_GIRIS_SIFRE)
+    .catch(()=>{
+      // Otomatik giriş başarısız olursa (hesap henüz oluşturulmadıysa) manuel giriş formu gösterilir.
+      document.getElementById('login-otomatik-durum').style.display = 'none';
+      document.getElementById('login-manuel-form').style.display = '';
+    });
+}
+otomatikGirisDene();
 
 function girisYap(){
   const email = document.getElementById('login-email').value.trim();
