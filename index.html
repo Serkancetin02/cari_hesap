@@ -280,6 +280,7 @@
     <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openFirmaTemizleModal()">🧹 Firma Bazlı Temizle</button>
     <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openTumHareketleriTemizleModal()">🗑️ Tüm Hareketleri Temizle</button>
     <button class="btn" style="background:#5B7A6F;border-color:#5B7A6F;color:#fff;" onclick="openYilSonuDevirModal()">📅 Yıl Sonu Devri</button>
+    <button class="btn" onclick="openFirmaBilgileriModal()">🏢 Firma Bilgileri (Rapor Başlığı)</button>
     <button class="btn" onclick="cariHesapRaporuOlustur()">📄 Hesap Hareket Raporu (PDF)</button>
     <button class="btn" onclick="tumMukelleflerRaporuModal()">📋 Tüm Borçlu/Alacaklı Raporu (PDF)</button>
     <button class="btn" onclick="dosyaJsonDisaAktar()">💾 Yedek Al (.json)</button>
@@ -326,6 +327,7 @@
       <option value="10">Ekim</option><option value="11">Kasım</option><option value="12">Aralık</option>
     </select>
     <button class="btn" style="background:#5B7A6F;border-color:#5B7A6F;color:#fff;" onclick="openAySonuDevirModal()">📅 Ay Kapat ve Devret</button>
+    <button class="btn" onclick="openFirmaBilgileriModal()">🏢 Firma Bilgileri (Rapor Başlığı)</button>
     <button class="btn" onclick="kasaHareketRaporuOlustur()">📄 Kasa Hareket Raporu (PDF)</button>
     <button class="btn" onclick="exportKasaExcel()">📊 Excel'e Aktar</button>
     <button class="btn" style="border-color:var(--danger);color:var(--danger);" onclick="openKasaTemizleModal()">🗑️ Kasayı Temizle</button>
@@ -358,7 +360,7 @@
 /* ============================================================
    VERİ MODELİ — bağımsız IndexedDB (ana ofis programından ayrı)
    ============================================================ */
-let DB = { cariHesap: [], mukellefListesi: [], kasaHareket: [] };
+let DB = { cariHesap: [], mukellefListesi: [], kasaHareket: [], firmaBilgisi: {} };
 let aktifMukellefFiltre = '';
 const IDB_NAME = 'cariHesapBagimsizDB';
 const IDB_STORE = 'kv';
@@ -425,6 +427,7 @@ function seedData(){
       {id:4, mukellef:"Ahmet Demir (Şahıs)", tarih:addDays(-15), aciklama:"Havale ile ödeme", tur:"Alacak", tutar:1800}
     ],
     mukellefListesi: [],
+    firmaBilgisi: {},
     kasaHareket: [
       {id:1, tarih:addDays(-20), aciklama:"Tahsilat - Deniz Yapı İnşaat Ltd. Şti. (Kısmi ödeme)", tur:"Giriş", tutar:2000, kaynak:"tahsilat", cariHesapId:2},
       {id:2, tarih:addDays(-15), aciklama:"Tahsilat - Ahmet Demir (Şahıs) (Havale ile ödeme)", tur:"Giriş", tutar:1800, kaynak:"tahsilat", cariHesapId:4},
@@ -449,6 +452,66 @@ function tutarGizleAcKapat(){
 }
 function esc(str){ const d=document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
 function val(id){ return document.getElementById(id).value.trim(); }
+
+/* ------------ Firma Bilgileri (raporların üst başlığında yer alır) ------------ */
+function firmaBilgisiAl(){ return (DB && DB.firmaBilgisi) || {}; }
+function raporFirmaBasligi(){
+  const f = firmaBilgisiAl();
+  const unvan = (f.unvan||'').trim();
+  const satirlar = [];
+  if(f.adres) satirlar.push(esc(f.adres));
+  const iletisim = [];
+  if(f.telefon) iletisim.push('Tel: ' + esc(f.telefon));
+  if(f.eposta) iletisim.push('E-posta: ' + esc(f.eposta));
+  if(iletisim.length) satirlar.push(iletisim.join(' · '));
+  const vergi = [];
+  if(f.vergiDairesi) vergi.push('V.D.: ' + esc(f.vergiDairesi));
+  if(f.vergiNo) vergi.push('V.No: ' + esc(f.vergiNo));
+  if(vergi.length) satirlar.push(vergi.join(' · '));
+  if(f.iban) satirlar.push('IBAN: ' + esc(f.iban));
+  if(!unvan && !satirlar.length) return '';
+  return `
+      <div style="border-bottom:2px solid #1B2430;padding-bottom:12px;margin-bottom:20px;">
+        ${unvan ? `<div style="font-size:17px;font-weight:700;letter-spacing:.2px;">${esc(unvan)}</div>` : ''}
+        ${satirlar.length ? `<div style="font-size:11.5px;color:#5B6672;line-height:1.6;margin-top:3px;">${satirlar.join('<br>')}</div>` : ''}
+      </div>`;
+}
+function openFirmaBilgileriModal(){
+  const f = firmaBilgisiAl();
+  const alan = (id, etiket, deger, ph) => `
+    <div class="field"><label>${etiket}</label>
+      <input id="${id}" value="${esc(deger||'')}" placeholder="${ph||''}"></div>`;
+  renderModal(`
+    <h3>🏢 Firma Bilgileri</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Buraya girdiğiniz bilgiler tüm PDF raporların (Hesap Hareket, Borçlu/Alacaklı, Kasa) üst kısmında başlık olarak yer alır. Boş bıraktığınız alanlar raporda gösterilmez.</p>
+    ${alan('f-firmaUnvan','Firma Unvanı',f.unvan,'Örn. Yılmaz Mali Müşavirlik')}
+    ${alan('f-firmaVergiDairesi','Vergi Dairesi',f.vergiDairesi,'')}
+    ${alan('f-firmaVergiNo','Vergi No / TC Kimlik No',f.vergiNo,'')}
+    ${alan('f-firmaAdres','Adres',f.adres,'')}
+    ${alan('f-firmaTelefon','Telefon',f.telefon,'')}
+    ${alan('f-firmaEposta','E-posta',f.eposta,'')}
+    ${alan('f-firmaIban','IBAN',f.iban,'TR..')}
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Vazgeç</button>
+      <button class="btn primary" onclick="firmaBilgileriKaydet()">Kaydet</button>
+    </div>
+  `);
+  setTimeout(()=>document.getElementById('f-firmaUnvan')?.focus(), 50);
+}
+async function firmaBilgileriKaydet(){
+  DB.firmaBilgisi = {
+    unvan: val('f-firmaUnvan'),
+    vergiDairesi: val('f-firmaVergiDairesi'),
+    vergiNo: val('f-firmaVergiNo'),
+    adres: val('f-firmaAdres'),
+    telefon: val('f-firmaTelefon'),
+    eposta: val('f-firmaEposta'),
+    iban: val('f-firmaIban')
+  };
+  await kaydet();
+  closeModal();
+  document.getElementById('status-msg').textContent = 'Firma bilgileri kaydedildi';
+}
 /* ------------ Daha önce yazılmış açıklamaları hatırla (öneri listesi) ------------ */
 function aciklamaGecmisiOptions(){
   const hepsi = [
@@ -852,6 +915,7 @@ async function kasaHareketRaporuOlustur(){
 
   const icHtml = `
     <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      ${raporFirmaBasligi()}
       <h1 style="font-size:20px;margin:0 0 4px;">Kasa Hareket Raporu</h1>
       <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;">Dönem: <strong>${donemEtiketi}</strong><br>Rapor Tarihi: ${bugun}</div>
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -1506,6 +1570,7 @@ async function cariHesapRaporuOlustur(mukellefParam){
 
   const icHtml = `
     <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      ${raporFirmaBasligi()}
       <h1 style="font-size:20px;margin:0 0 4px;">Cari Hesap Hareket Raporu</h1>
       <div style="color:#5B6672;font-size:13px;margin-bottom:22px;line-height:1.5;"><strong>${esc(f)}</strong> — Dönem: <strong>${donemEtiketi}</strong><br>Rapor Tarihi: ${bugun}</div>
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -1617,6 +1682,7 @@ async function tumMukelleflerRaporuOlustur(){
 
   const icHtml = `
     <div style="font-family:'Segoe UI', Arial, sans-serif; color:#1B2430; padding:36px; background:#fff;">
+      ${raporFirmaBasligi()}
       <h1 style="font-size:20px;margin:0 0 4px;">${esc(baslik)}</h1>
       <div style="color:#5B6672;font-size:13px;margin-bottom:22px;">Rapor Tarihi: ${bugun} · Toplam ${ozet.length} mükellef${aciklamaFiltre?` · Açıklama filtresi: "${esc(aciklamaFiltre)}"`:''}</div>
       ${govde}
